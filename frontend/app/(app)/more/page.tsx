@@ -1,0 +1,198 @@
+'use client';
+import Link from 'next/link';
+import { useState } from 'react';
+import { useAuth } from '@/components/Auth';
+import { IconBell, IconChevronR, IconDatabase, IconFilm, IconHistory, IconLock, IconLogout, IconPalette, IconReport, IconSend, IconSettings } from '@/components/Icons';
+import { Notice, Sheet, useToast } from '@/components/ui';
+import { api, downloadFile, useFetch } from '@/lib/api';
+import { initials } from '@/lib/dates';
+import { ROLE_LABEL } from '@/lib/labels';
+import { ThemeMode, useTheme } from '@/lib/theme';
+
+const MODES: { id: ThemeMode; label: string }[] = [
+  { id: 'light', label: 'Day' },
+  { id: 'dark', label: 'Night' },
+  { id: 'system', label: 'Auto' },
+];
+
+export default function MorePage() {
+  const { user, unread, signOut } = useAuth();
+  const { mode, setMode } = useTheme();
+  const toast = useToast();
+  const [pw, setPw] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const reqs = useFetch<{ items: unknown[] }>(user?.role === 'admin' ? '/api/requests' : null);
+  if (!user) return null;
+  const pending = reqs.data?.items.length ?? 0;
+  const isAdmin = user.role === 'admin';
+
+  async function backup() {
+    setBusy(true);
+    try {
+      await downloadFile('/api/backup', 'callsheet-backup.sqlite');
+      toast('Backup downloaded');
+    } catch (e: any) {
+      toast(e.message || 'Could not create the backup', 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="page">
+      <div className="page-head">
+        <h1 className="title">More</h1>
+      </div>
+
+      <div className="sheet pad" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <span className="avatar avatar-lg">{initials(user.name)}</span>
+        <div style={{ minWidth: 0 }}>
+          <div className="h2">{user.name}</div>
+          <div className="muted small">
+            {ROLE_LABEL[user.role]} · @{user.username}
+          </div>
+          {user.phone && <div className="muted small">{user.phone}</div>}
+        </div>
+      </div>
+
+      {isAdmin && (
+        <>
+          <h2 className="list-title">Manage</h2>
+          <div className="list">
+            <Link href="/reports" className="row">
+              <IconReport className="ico" />
+              <div className="grow">
+                <div className="name">Reports and export</div>
+                <div className="meta">Filter by date and team, download Excel</div>
+              </div>
+              <IconChevronR className="ico" />
+            </Link>
+            <Link href="/editing" className="row">
+              <IconFilm className="ico" />
+              <div className="grow">
+                <div className="name">Video editing</div>
+                <div className="meta">Which videos are edited, which are waiting</div>
+              </div>
+              <IconChevronR className="ico" />
+            </Link>
+            <Link href="/branding" className="row">
+              <IconPalette className="ico" />
+              <div className="grow">
+                <div className="name">Branding</div>
+                <div className="meta">App name, logo and color</div>
+              </div>
+              <IconChevronR className="ico" />
+            </Link>
+            <Link href="/settings" className="row">
+              <IconSettings className="ico" />
+              <div className="grow">
+                <div className="name">Settings</div>
+                <div className="meta">Capture days, team size, slot length</div>
+              </div>
+              <IconChevronR className="ico" />
+            </Link>
+            <Link href="/requests" className="row">
+              <IconSend className="ico" />
+              <div className="grow name">Supervisor requests</div>
+              {pending > 0 && <span className="pill pill-live">{pending} new</span>}
+              <IconChevronR className="ico" />
+            </Link>
+            <Link href="/audit" className="row">
+              <IconHistory className="ico" />
+              <div className="grow">
+                <div className="name">Activity log</div>
+                <div className="meta">Who changed what, and when</div>
+              </div>
+              <IconChevronR className="ico" />
+            </Link>
+            <button className="row" onClick={backup} disabled={busy}>
+              <IconDatabase className="ico" />
+              <div className="grow">
+                <div className="name">{busy ? 'Preparing backup…' : 'Download backup'}</div>
+                <div className="meta">A copy of all your data</div>
+              </div>
+              <IconChevronR className="ico" />
+            </button>
+          </div>
+        </>
+      )}
+
+      <h2 className="list-title">Your account</h2>
+      <div className="list">
+        <Link href="/alerts" className="row">
+          <IconBell className="ico" />
+          <div className="grow name">Alerts</div>
+          {unread > 0 && <span className="pill pill-live">{unread} new</span>}
+          <IconChevronR className="ico" />
+        </Link>
+        <div className="row" style={{ flexWrap: 'wrap' }}>
+          <div className="grow">
+            <div className="name">Appearance</div>
+            <div className="meta">Day, night, or follow your phone</div>
+          </div>
+          <div className="seg" role="group" aria-label="Appearance" style={{ minWidth: 190 }}>
+            {MODES.map((m) => (
+              <button key={m.id} aria-pressed={mode === m.id} onClick={() => setMode(m.id)}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <button className="row" onClick={() => setPw(true)}>
+          <IconLock className="ico" />
+          <div className="grow name">Change password</div>
+          <IconChevronR className="ico" />
+        </button>
+      </div>
+
+      <div className="list" style={{ marginTop: 18 }}>
+        <button className="row" onClick={signOut} style={{ color: 'var(--tally)' }}>
+          <IconLogout className="ico" style={{ color: 'var(--tally)' }} />
+          <div className="grow name">Sign out</div>
+        </button>
+      </div>
+
+      {pw && <ChangePassword onClose={() => setPw(false)} />}
+    </div>
+  );
+}
+
+function ChangePassword({ onClose }: { onClose: () => void }) {
+  const toast = useToast();
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function save() {
+    setBusy(true);
+    setErr(null);
+    try {
+      await api('/api/auth/change-password', { method: 'POST', body: { current, next } });
+      toast('Password changed');
+      onClose();
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Sheet title="Change password" onClose={onClose}>
+      {err && <Notice kind="error">{err}</Notice>}
+      <label className="field">
+        <span className="label">Current password</span>
+        <input className="input" type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />
+      </label>
+      <label className="field">
+        <span className="label">New password</span>
+        <input className="input" type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} />
+        <p className="hint">At least 6 characters.</p>
+      </label>
+      <button className="btn btn-primary btn-block" disabled={busy || !current || next.length < 6} onClick={save}>
+        Save password
+      </button>
+    </Sheet>
+  );
+}
