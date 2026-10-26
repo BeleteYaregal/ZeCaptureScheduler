@@ -5,7 +5,7 @@ export async function GET() {
   let name = 'Callsheet';
   let color = '#1a56db';
   try {
-    const r = await fetch(`${process.env.API_URL || 'http://localhost:4000'}/api/branding`, { cache: 'no-store' });
+    const r = await fetch(`${process.env.API_URL || 'http://127.0.0.1:4000'}/api/branding`, { cache: 'no-store' });
     if (r.ok) {
       const b = await r.json();
       if (typeof b.name === 'string' && b.name) name = b.name;

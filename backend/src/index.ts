@@ -27,6 +27,10 @@ async function main() {
   });
 }
 
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled rejection:', err);
+});
+
 main().catch((err) => {
   console.error('Failed to start:', err);
   process.exit(1);

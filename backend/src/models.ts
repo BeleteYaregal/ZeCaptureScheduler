@@ -242,10 +242,16 @@ CaptureDay.hasMany(Booking, { foreignKey: 'captureDayId', as: 'bookings' });
 export async function initDb(): Promise<void> {
   await sequelize.authenticate();
   await sequelize.sync();
-  // Existing databases: add the video-editing columns if they are missing.
-  const qi = sequelize.getQueryInterface();
-  const cols = await qi.describeTable('bookings');
-  if (!cols.editDone) await qi.addColumn('bookings', 'editDone', { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false });
-  if (!cols.requestedById) await qi.addColumn('bookings', 'requestedById', { type: DataTypes.INTEGER, allowNull: true });
-  if (!cols.editedAt) await qi.addColumn('bookings', 'editedAt', { type: DataTypes.DATE, allowNull: true });
+  try {
+    // Existing databases: add the video-editing columns if they are missing.
+    const qi = sequelize.getQueryInterface();
+    const cols = await qi.describeTable('bookings');
+    const hasCol = (name: string) =>
+      Object.keys(cols).some((k) => k.toLowerCase() === name.toLowerCase());
+    if (!hasCol('editDone')) await qi.addColumn('bookings', 'editDone', { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false });
+    if (!hasCol('requestedById')) await qi.addColumn('bookings', 'requestedById', { type: DataTypes.INTEGER, allowNull: true });
+    if (!hasCol('editedAt')) await qi.addColumn('bookings', 'editedAt', { type: DataTypes.DATE, allowNull: true });
+  } catch (err) {
+    console.warn('Optional column migration check:', err);
+  }
 }
