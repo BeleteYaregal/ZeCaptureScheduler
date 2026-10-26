@@ -4,20 +4,7 @@ import path from 'path';
 import { config } from './config';
 
 function makeSequelize(): Sequelize {
-  if (config.databaseUrl) {
-    const isPostgres = config.databaseUrl.startsWith('postgres');
-    return new Sequelize(config.databaseUrl, {
-      logging: false,
-      dialectOptions: isPostgres
-        ? {
-            ssl: {
-              require: true,
-              rejectUnauthorized: false,
-            },
-          }
-        : undefined,
-    });
-  }
+  if (config.databaseUrl) return new Sequelize(config.databaseUrl, { logging: false });
   if (config.sqlitePath !== ':memory:') fs.mkdirSync(path.dirname(config.sqlitePath), { recursive: true });
   return new Sequelize({ dialect: 'sqlite', storage: config.sqlitePath, logging: false });
 }
@@ -39,6 +26,8 @@ export class User extends Model {
   declare supervisorId: number | null; // salespeople and supervisor logins
   declare phone: string | null;
   declare active: boolean;
+  declare telegramChatId: string | null;
+  declare telegramLinkCode: string | null;
 }
 User.init(
   {
@@ -50,6 +39,8 @@ User.init(
     supervisorId: { type: DataTypes.INTEGER, allowNull: true },
     phone: { type: DataTypes.STRING(30), allowNull: true },
     active: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+    telegramChatId: { type: DataTypes.STRING(30), allowNull: true },
+    telegramLinkCode: { type: DataTypes.STRING(40), allowNull: true },
   },
   { sequelize, modelName: 'User', tableName: 'users' }
 );
@@ -242,16 +233,13 @@ CaptureDay.hasMany(Booking, { foreignKey: 'captureDayId', as: 'bookings' });
 export async function initDb(): Promise<void> {
   await sequelize.authenticate();
   await sequelize.sync();
-  try {
-    // Existing databases: add the video-editing columns if they are missing.
-    const qi = sequelize.getQueryInterface();
-    const cols = await qi.describeTable('bookings');
-    const hasCol = (name: string) =>
-      Object.keys(cols).some((k) => k.toLowerCase() === name.toLowerCase());
-    if (!hasCol('editDone')) await qi.addColumn('bookings', 'editDone', { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false });
-    if (!hasCol('requestedById')) await qi.addColumn('bookings', 'requestedById', { type: DataTypes.INTEGER, allowNull: true });
-    if (!hasCol('editedAt')) await qi.addColumn('bookings', 'editedAt', { type: DataTypes.DATE, allowNull: true });
-  } catch (err) {
-    console.warn('Optional column migration check:', err);
-  }
+  // Existing databases: add the video-editing columns if they are missing.
+  const qi = sequelize.getQueryInterface();
+  const userCols = await qi.describeTable('users');
+  if (!userCols.telegramChatId) await qi.addColumn('users', 'telegramChatId', { type: DataTypes.STRING(30), allowNull: true });
+  if (!userCols.telegramLinkCode) await qi.addColumn('users', 'telegramLinkCode', { type: DataTypes.STRING(40), allowNull: true });
+  const cols = await qi.describeTable('bookings');
+  if (!cols.editDone) await qi.addColumn('bookings', 'editDone', { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false });
+  if (!cols.requestedById) await qi.addColumn('bookings', 'requestedById', { type: DataTypes.INTEGER, allowNull: true });
+  if (!cols.editedAt) await qi.addColumn('bookings', 'editedAt', { type: DataTypes.DATE, allowNull: true });
 }

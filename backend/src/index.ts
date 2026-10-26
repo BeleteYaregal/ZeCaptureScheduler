@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { createApp } from './app';
 import { config } from './config';
 import { initDb, User } from './models';
+import { startTelegramPolling } from './services/telegram';
 
 async function ensureAdmin() {
   if ((await User.count()) > 0) return;
@@ -25,11 +26,8 @@ async function main() {
   app.listen(config.port, '0.0.0.0', () => {
     console.log(`Capture Scheduler API running on http://localhost:${config.port}  (timezone ${config.timezone})`);
   });
+  void startTelegramPolling();
 }
-
-process.on('unhandledRejection', (err) => {
-  console.error('Unhandled rejection:', err);
-});
 
 main().catch((err) => {
   console.error('Failed to start:', err);

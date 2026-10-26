@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { Setting } from './models';
 
+export type DayKind = 'sales' | 'company' | 'off';
+
 export interface Settings {
   /** Max salespeople one supervisor can have. */
   max_team_size: number;
@@ -12,6 +14,10 @@ export interface Settings {
   people_per_sales_day: number | null;
   /** Max people one supervisor may book (or request) on a single day. */
   supervisor_max_per_day: number;
+  /** Standard week, Monday to Saturday: what each day normally is. */
+  week_pattern: DayKind[];
+  /** Videographer used when applying the standard week. */
+  default_videographer_id: number | null;
   /** Minutes reserved for each person. */
   slot_minutes: number;
   /** First slot of the day, HH:MM. */
@@ -26,6 +32,8 @@ export const DEFAULT_SETTINGS: Settings = {
   company_days_per_week: 2,
   people_per_sales_day: null,
   supervisor_max_per_day: 3,
+  week_pattern: ['sales', 'sales', 'sales', 'sales', 'company', 'company'],
+  default_videographer_id: null,
   slot_minutes: 30,
   day_start_time: '09:00',
   overdue_days: 30,
@@ -37,10 +45,20 @@ export const SettingsSchema = z
     sales_days_per_week: z.number().int().min(0).max(7),
     company_days_per_week: z.number().int().min(0).max(7),
     people_per_sales_day: z.number().int().min(1).max(200).nullable(),
+    week_pattern: z.array(z.enum(['sales', 'company', 'off'])).length(6),
+    default_videographer_id: z.number().int().nullable(),
     supervisor_max_per_day: z.number().int().min(1).max(50),
     slot_minutes: z.number().int().min(5).max(240),
     day_start_time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use HH:MM (24h)'),
     overdue_days: z.number().int().min(1).max(365),
+  })
+  .refine((s) => s.week_pattern.filter((d) => d === 'sales').length <= s.sales_days_per_week, {
+    message: 'The standard week has more sales days than the limit allows',
+    path: ['week_pattern'],
+  })
+  .refine((s) => s.week_pattern.filter((d) => d === 'company').length <= s.company_days_per_week, {
+    message: 'The standard week has more company days than the limit allows',
+    path: ['week_pattern'],
   })
   .refine((s) => s.sales_days_per_week + s.company_days_per_week <= 7, {
     message: 'Sales days + company days cannot be more than 7',

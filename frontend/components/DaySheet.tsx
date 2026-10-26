@@ -20,8 +20,11 @@ interface Props {
   defaultGrouped?: boolean;
 }
 
+const PAGE = 10;
+
 export default function DaySheet({ day, week, role, userId, published, onChanged, defaultGrouped }: Props) {
   const [grouped, setGrouped] = useState(!!defaultGrouped);
+  const [shown, setShown] = useState(PAGE);
   const [open, setOpen] = useState<BookingView | null>(null);
   const [dayMenu, setDayMenu] = useState<null | 'add' | 'cancel'>(null);
   const isAdmin = role === 'admin';
@@ -49,6 +52,24 @@ export default function DaySheet({ day, week, role, userId, published, onChanged
           .map(([name, list]) => ({ name, list: list.sort((a, b) => a.startTime.localeCompare(b.startTime)) })),
       }));
   }, [live]);
+
+  // "By team" view shows the same first N people, so both views page the same way.
+  const shownGroups = useMemo(() => {
+    let left = shown;
+    return groups
+      .map((g) => ({
+        ...g,
+        sups: g.sups
+          .map((s) => {
+            const list = s.list.slice(0, Math.max(0, left));
+            left -= list.length;
+            return { ...s, list, total: s.list.length };
+          })
+          .filter((s) => s.list.length > 0),
+      }))
+      .filter((g) => g.sups.length > 0);
+  }, [groups, shown]);
+  const hidden = Math.max(0, live.length - shown);
 
   const canOpen = (isAdmin || role === 'videographer') && !cancelled;
   const toast = useToast();
@@ -116,7 +137,7 @@ export default function DaySheet({ day, week, role, userId, published, onChanged
       ) : live.length === 0 ? (
         <p className="pad muted">{role === 'sales' ? 'You are not booked on this day.' : isAdmin ? 'Nobody is booked on this day yet.' : 'Nobody is booked on this day.'}</p>
       ) : grouped ? (
-        groups.map((g) => (
+        shownGroups.map((g) => (
           <div key={g.manager}>
             <div className="group-head">
               <span className="name">{g.manager}</span>
@@ -126,7 +147,7 @@ export default function DaySheet({ day, week, role, userId, published, onChanged
               <div key={s.name}>
                 <div className="subhead">
                   <span>{s.name}</span>
-                  <span className="faint num">{s.list.length}</span>
+                  <span className="faint num">{s.total}</span>
                 </div>
                 <ul className="slots">
                   {s.list.map((b) => (
@@ -139,10 +160,18 @@ export default function DaySheet({ day, week, role, userId, published, onChanged
         ))
       ) : (
         <ul className="slots">
-          {live.map((b) => (
+          {live.slice(0, shown).map((b) => (
             <SlotRow key={b.id} b={b} mine={b.person.id === userId} showTeam onOpen={canOpen ? () => setOpen(b) : undefined} onTick={canTick ? (s) => tick(b, s) : undefined} onEdit={canTick ? (d) => setEdit(b, d) : undefined} />
           ))}
         </ul>
+      )}
+
+      {hidden > 0 && !cancelled && day.type === 'sales' && (
+        <div className="pad" style={{ paddingTop: 4 }}>
+          <button className="btn btn-soft btn-block" onClick={() => setShown((n) => n + PAGE)}>
+            Show more ({hidden} left)
+          </button>
+        </div>
       )}
 
       {isAdmin && !cancelled && (

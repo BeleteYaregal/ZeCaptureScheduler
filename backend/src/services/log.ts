@@ -1,4 +1,5 @@
 import { AuditLog, Notification } from '../models';
+import { pushTelegram } from './telegram';
 
 export async function audit(
   userId: number | null,
@@ -24,4 +25,5 @@ export async function notify(userIds: number[], title: string, body: string): Pr
   const ids = [...new Set(userIds)];
   if (!ids.length) return;
   await Notification.bulkCreate(ids.map((userId) => ({ userId, title, body })));
+  pushTelegram(ids, title, body); // also to Telegram, for people who connected it
 }

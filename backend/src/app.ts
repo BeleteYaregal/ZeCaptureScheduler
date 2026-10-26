@@ -7,6 +7,7 @@ import { authRouter } from './routes/auth';
 import { weeksRouter } from './routes/weeks';
 import { reportsRouter } from './routes/reports';
 import { teamRouter } from './routes/team';
+import { telegramRouter } from './routes/telegram';
 import { getBranding } from './services/branding';
 
 export function createApp() {
@@ -32,6 +33,7 @@ export function createApp() {
   app.use('/api', adminRouter);
   app.use('/api', reportsRouter);
   app.use('/api', teamRouter);
+  app.use('/api', telegramRouter);
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
   app.use(errorHandler);
   return app;

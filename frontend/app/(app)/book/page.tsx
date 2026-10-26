@@ -4,7 +4,7 @@ import { useAuth } from '@/components/Auth';
 import { IconChevronL, IconChevronR, IconEmpty } from '@/components/Icons';
 import { Empty, ErrorBox, Loading, Notice, Sheet, useToast } from '@/components/ui';
 import { api, useFetch } from '@/lib/api';
-import { addDays, longDay, mondayOf, todayStr, weekRange } from '@/lib/dates';
+import { addDays, longDay, mondayOf, todayStr, weekdayIndex, weekRange } from '@/lib/dates';
 import type { DayView, WeekView } from '@/lib/types';
 
 interface Member {
@@ -17,7 +17,7 @@ export default function BookPage() {
   const { user } = useAuth();
   const toast = useToast();
   const today = todayStr();
-  const [weekStart, setWeekStart] = useState(mondayOf(today));
+  const [weekStart, setWeekStart] = useState(weekdayIndex(today) >= 5 ? addDays(mondayOf(today), 7) : mondayOf(today)); // from Saturday on, start with next week
   const [pick, setPick] = useState<DayView | null>(null);
   const week = useFetch<WeekView>(`/api/weeks/${weekStart}`);
   const team = useFetch<{ members: Member[]; perDay: number }>('/api/team/members');
@@ -65,7 +65,7 @@ export default function BookPage() {
 
       {data && days.length === 0 && (
         <div className="sheet">
-          <Empty icon={<IconEmpty />} title="No open days this week" text="When the admin plans sales days for this week, you can request slots here." />
+          <Empty icon={<IconEmpty />} title="No open days left this week" text="Days that already passed are not shown. Use the arrows to see the next weeks." />
         </div>
       )}
 

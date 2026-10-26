@@ -7,6 +7,7 @@ import { wrap } from '../http';
 import { Booking, CaptureDay, Week } from '../models';
 import {
   addBooking,
+  autoPlan,
   cancelDay,
   generateWeek,
   getWeekView,
@@ -39,6 +40,14 @@ weeksRouter.put(
   requireRole('admin'),
   wrap(async (req, res) => {
     res.json(await savePlan(req.user!, req.params.weekStart, req.body));
+  })
+);
+
+weeksRouter.post(
+  '/weeks/auto',
+  requireRole('admin'),
+  wrap(async (req, res) => {
+    res.json(await autoPlan(req.user!, req.body));
   })
 );
 

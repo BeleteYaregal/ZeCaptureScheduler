@@ -20,6 +20,7 @@ export default function MorePage() {
   const { mode, setMode } = useTheme();
   const toast = useToast();
   const [pw, setPw] = useState(false);
+  const [tg, setTg] = useState(false);
   const [busy, setBusy] = useState(false);
   const reqs = useFetch<{ items: unknown[] }>(user?.role === 'admin' ? '/api/requests' : null);
   if (!user) return null;
@@ -125,6 +126,14 @@ export default function MorePage() {
           {unread > 0 && <span className="pill pill-live">{unread} new</span>}
           <IconChevronR className="ico" />
         </Link>
+        <button className="row" onClick={() => setTg(true)}>
+          <IconSend className="ico" />
+          <div className="grow">
+            <div className="name">Telegram alerts</div>
+            <div className="meta">Get your alerts in Telegram too</div>
+          </div>
+          <IconChevronR className="ico" />
+        </button>
         <div className="row" style={{ flexWrap: 'wrap' }}>
           <div className="grow">
             <div className="name">Appearance</div>
@@ -153,6 +162,7 @@ export default function MorePage() {
       </div>
 
       {pw && <ChangePassword onClose={() => setPw(false)} />}
+      {tg && <TelegramSheet onClose={() => setTg(false)} />}
     </div>
   );
 }
@@ -193,6 +203,70 @@ function ChangePassword({ onClose }: { onClose: () => void }) {
       <button className="btn btn-primary btn-block" disabled={busy || !current || next.length < 6} onClick={save}>
         Save password
       </button>
+    </Sheet>
+  );
+}
+
+function TelegramSheet({ onClose }: { onClose: () => void }) {
+  const toast = useToast();
+  const { data, loading, reload } = useFetch<{ enabled: boolean; bot: string | null; linked: boolean }>('/api/telegram');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [opened, setOpened] = useState(false);
+
+  async function act(fn: () => Promise<unknown>, ok?: string) {
+    setBusy(true);
+    setErr(null);
+    try {
+      await fn();
+      if (ok) toast(ok);
+      await reload();
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const connect = () =>
+    act(async () => {
+      const r = await api<{ url: string }>('/api/telegram/link', { method: 'POST' });
+      window.open(r.url, '_blank');
+      setOpened(true);
+    });
+
+  return (
+    <Sheet title="Telegram alerts" subtitle="Every alert you get in the app also arrives in Telegram." onClose={onClose}>
+      {err && <Notice kind="error">{err}</Notice>}
+      {loading && !data && <p className="muted">Loading…</p>}
+      {data && !data.enabled && <Notice>Telegram is not set up yet. The admin must add the bot token on the server.</Notice>}
+      {data?.enabled && data.linked && (
+        <>
+          <Notice kind="good">Connected. Your alerts arrive in Telegram.</Notice>
+          <button className="btn btn-soft btn-block" disabled={busy} onClick={() => act(() => api('/api/telegram/test', { method: 'POST' }), 'Test sent')}>
+            Send a test alert
+          </button>
+          <div style={{ height: 8 }} />
+          <button className="btn btn-danger btn-block" disabled={busy} onClick={() => act(() => api('/api/telegram', { method: 'DELETE' }), 'Disconnected')}>
+            Disconnect
+          </button>
+        </>
+      )}
+      {data?.enabled && !data.linked && (
+        <>
+          <p className="muted" style={{ marginBottom: 12 }}>
+            Tap Connect, then press <b>Start</b> in the Telegram chat{data.bot ? ` with @${data.bot}` : ''}. Come back here afterwards.
+          </p>
+          <button className="btn btn-primary btn-block" disabled={busy} onClick={connect}>
+            Connect Telegram
+          </button>
+          {opened && (
+            <button className="btn btn-ghost btn-block" style={{ marginTop: 8 }} onClick={() => reload()}>
+              I pressed Start
+            </button>
+          )}
+        </>
+      )}
     </Sheet>
   );
 }

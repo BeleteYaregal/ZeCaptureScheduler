@@ -5,7 +5,7 @@ import { addDays, addMinutes, isValidDate, mondayOf, prettyDay, todayIn } from '
 import { HttpError } from '../http';
 import { Booking, CaptureDay, Unavailability, User, Week } from '../models';
 import { autoCap, buildSchedule } from '../scheduler';
-import { getSettings, Settings } from '../settings';
+import { DEFAULT_SETTINGS, getSettings, Settings } from '../settings';
 import { audit, notify } from './log';
 import { loadActiveSales, loadOrgMaps, visibleSalesIds } from './org';
 
@@ -79,8 +79,40 @@ async function assertVideographer(id: number | null | undefined): Promise<void> 
 
 // ---------------------------------------------------------------- read
 
+/**
+ * Upcoming weeks are always open: the first time an admin or supervisor looks at a week
+ * that has no plan yet, it is created from the standard week (Settings). Nothing is built
+ * or published, so the admin can still change it.
+ */
+async function ensureOpenWeek(weekStart: string): Promise<void> {
+  const cur = mondayOf(todayIn(config.timezone));
+  if (weekStart < cur || weekStart > addDays(cur, 7 * 12)) return;
+  if (await Week.findOne({ where: { weekStart } })) return;
+  if (await CaptureDay.count({ where: { weekStart } })) return;
+  const settings = await getSettings();
+  const kinds = (settings.week_pattern ?? DEFAULT_SETTINGS.week_pattern).map((t, i) => ({ type: t, date: addDays(weekStart, i) })).filter((d) => d.type !== 'off');
+  if (!kinds.length) return;
+  const vid = settings.default_videographer_id;
+  const videographer = vid ? await User.findOne({ where: { id: vid, role: 'videographer', active: true } }) : null;
+  try {
+    await Week.create({ weekStart, status: 'draft', videographerId: videographer?.id ?? null });
+    for (const d of kinds) {
+      await CaptureDay.create({
+        weekStart,
+        date: d.date,
+        type: d.type as 'sales' | 'company',
+        startTime: settings.day_start_time,
+        videographerId: videographer?.id ?? null,
+      });
+    }
+  } catch {
+    /* another request created it first */
+  }
+}
+
 export async function getWeekView(weekStart: string, viewer: User) {
   assertMonday(weekStart);
+  if (viewer.role === 'admin' || viewer.role === 'supervisor') await ensureOpenWeek(weekStart);
   const settings = await getSettings();
   const weekEnd = addDays(weekStart, 6);
   const limits = {
@@ -804,4 +836,74 @@ export async function removeFutureBookingsFor(userId: number): Promise<number> {
   for (const r of rows) await r.destroy();
   for (const dayId of dayIds) await recomputeSlots(dayId, settings);
   return rows.length;
+}
+
+// ---------------------------------------------------------------- standard week & plan ahead
+
+const AutoSchema = z.object({
+  fromWeek: z.string(),
+  weeks: z.number().int().min(1).max(12),
+  videographerId: z.number().int().nullable().optional(),
+  generate: z.boolean().optional(),
+  publish: z.boolean().optional(),
+  /** Replace weeks that already have days (never a published week). */
+  overwrite: z.boolean().optional(),
+});
+
+/** Applies the standard week (Settings) to one or more weeks, optionally building and publishing each. */
+export async function autoPlan(actor: User, body: unknown) {
+  const b = AutoSchema.parse(body);
+  assertMonday(b.fromWeek);
+  const settings = await getSettings();
+  const vid = b.videographerId ?? settings.default_videographer_id ?? null;
+  if (b.publish && !vid) throw new HttpError(422, 'Choose a videographer first, so the weeks can be published', 'NO_VIDEOGRAPHER');
+  if (vid) await assertVideographer(vid);
+  const pattern = settings.week_pattern ?? DEFAULT_SETTINGS.week_pattern;
+  if (!pattern.some((d) => d !== 'off')) {
+    throw new HttpError(422, 'The standard week is empty. Set it in Settings first.', 'NO_PATTERN');
+  }
+
+  const results: { weekStart: string; result: 'done' | 'skipped' | 'failed'; note: string }[] = [];
+  for (let i = 0; i < b.weeks; i++) {
+    const ws = addDays(b.fromWeek, 7 * i);
+    try {
+      const week = await Week.findOne({ where: { weekStart: ws } });
+      if (week?.status === 'published') {
+        results.push({ weekStart: ws, result: 'skipped', note: 'Already published' });
+        continue;
+      }
+      const dayIds = (await CaptureDay.findAll({ where: { weekStart: ws } })).map((d) => d.id);
+      const scheduled = dayIds.length ? await Booking.count({ where: { captureDayId: { [Op.in]: dayIds } } }) : 0;
+      if (scheduled > 0 && !b.overwrite) {
+        results.push({ weekStart: ws, result: 'skipped', note: 'Already scheduled' });
+        continue;
+      }
+      await savePlan(actor, ws, {
+        videographerId: vid,
+        days: pattern
+          .map((t, k) => ({ date: addDays(ws, k), type: t }))
+          .filter((d) => d.type !== 'off'),
+      });
+      let note = 'Days set';
+      const hasSales = pattern.includes('sales');
+      if ((b.generate || b.publish) && hasSales) {
+        await generateWeek(actor, ws);
+        note = 'Schedule built';
+      }
+      if (b.publish) {
+        await publishWeek(actor, ws);
+        note = 'Published';
+      }
+      results.push({ weekStart: ws, result: 'done', note });
+    } catch (e: any) {
+      results.push({ weekStart: ws, result: 'failed', note: e?.message ?? 'Failed' });
+    }
+  }
+  await audit(actor.id, 'plan.auto', 'week', b.fromWeek, {
+    weeks: b.weeks,
+    done: results.filter((r) => r.result === 'done').length,
+    generate: !!b.generate,
+    publish: !!b.publish,
+  });
+  return { results };
 }
