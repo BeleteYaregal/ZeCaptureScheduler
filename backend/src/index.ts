@@ -3,6 +3,7 @@ import { createApp } from './app';
 import { config } from './config';
 import { initDb, User } from './models';
 import { startTelegramPolling } from './services/telegram';
+ import './loadEnv';
 
 async function ensureAdmin() {
   if ((await User.count()) > 0) return;
