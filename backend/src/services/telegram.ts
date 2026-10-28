@@ -30,7 +30,7 @@ async function call<T = any>(method: string, body: object = {}, timeoutMs = 1500
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-const BRAND = process.env.TELEGRAM_BRAND || 'Callsheet';
+const BRAND = process.env.TELEGRAM_BRAND || 'ZeCaptureSheet';
 const LINE = '━━━━━━━━━━━━━━';
 
 /** Icon and label for each kind of alert. Unknown titles fall back to a plain notice. */
