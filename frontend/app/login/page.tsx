@@ -1,7 +1,8 @@
 'use client';
 import { FormEvent, useState } from 'react';
 import { useAuth } from '@/components/Auth';
-import { IconLock, IconUser } from '@/components/Icons';
+import { IconLock, IconSmartphone, IconUser } from '@/components/Icons';
+import { InstallSheet } from '@/components/InstallPrompt';
 import { Notice } from '@/components/ui';
 import { BrandLogo, useBrand } from '@/lib/brand';
 import { ThemeToggle } from '@/lib/theme';
@@ -14,6 +15,7 @@ export default function LoginPage() {
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [install, setInstall] = useState(false);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -84,12 +86,25 @@ export default function LoginPage() {
             {busy ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
+        <div style={{ textAlign: 'center', marginTop: 14 }}>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, opacity: 0.85 }}
+            onClick={() => setInstall(true)}
+          >
+            <IconSmartphone style={{ width: 16, height: 16 }} />
+            <span>Install on iPhone or Android</span>
+          </button>
+        </div>
         <p className="faint small login-foot">Your admin creates your account. Forgot your password? Ask your admin to reset it.</p>
       </div>
 
       <p className="faint small login-copy">
         © {new Date().getFullYear()} {brand.name}
       </p>
+
+      {install && <InstallSheet onClose={() => setInstall(false)} />}
     </main>
   );
 }

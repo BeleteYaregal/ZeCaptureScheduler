@@ -46,6 +46,14 @@ export const IconReport = (p: P) => base(<><path d="M6 3.5h8l4 4V20a.5.5 0 0 1-.
 export const IconDatabase = (p: P) => base(<><ellipse cx="12" cy="6" rx="7.5" ry="2.8" /><path d="M4.5 6v6c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8V6M4.5 12v6c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8v-6" /></>, p);
 export const IconSearch = (p: P) => base(<><circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.2-4.2" /></>, p);
 export const IconImage = (p: P) => base(<><rect x="3.5" y="4.5" width="17" height="15" rx="3" /><circle cx="9" cy="10" r="1.6" /><path d="m4.5 17.5 4.5-4.5 3.5 3.5 3-3 4 4" /></>, p);
+export const IconSmartphone = (p: P) => base(<><rect x="5.5" y="2.5" width="13" height="19" rx="2.8" /><line x1="12" y1="17.5" x2="12.01" y2="17.5" strokeWidth={2.8} /></>, p);
+export const IconShare = (p: P) => base(<><path d="M4.5 12v7a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-7" /><polyline points="16 6 12 2 8 6" /><line x1="12" y1="2" x2="12" y2="15" /></>, p);
+export const IconPlusSquare = (p: P) => base(<><rect x="3.5" y="3.5" width="17" height="17" rx="3" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" /></>, p);
+export const IconApple = (p: P) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...p}>
+    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.84c.62-.75 1.04-1.8 1.01-2.84-.96.04-2.13.64-2.79 1.4-.58.67-1.1 1.74-1.01 2.78 1.07.08 2.17-.59 2.79-1.34z" />
+  </svg>
+);
 
 export const BrandMark = (p: P) => (
   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...p}>

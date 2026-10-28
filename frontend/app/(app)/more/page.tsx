@@ -2,7 +2,8 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useAuth } from '@/components/Auth';
-import { IconBell, IconChevronR, IconDatabase, IconFilm, IconHistory, IconLock, IconLogout, IconPalette, IconReport, IconSend, IconSettings } from '@/components/Icons';
+import { IconBell, IconChevronR, IconDatabase, IconFilm, IconHistory, IconLock, IconLogout, IconPalette, IconReport, IconSend, IconSettings, IconSmartphone } from '@/components/Icons';
+import { InstallSheet } from '@/components/InstallPrompt';
 import { Notice, Sheet, useToast } from '@/components/ui';
 import { api, downloadFile, useFetch } from '@/lib/api';
 import { initials } from '@/lib/dates';
@@ -21,6 +22,7 @@ export default function MorePage() {
   const toast = useToast();
   const [pw, setPw] = useState(false);
   const [tg, setTg] = useState(false);
+  const [install, setInstall] = useState(false);
   const [busy, setBusy] = useState(false);
   const reqs = useFetch<{ items: unknown[] }>(user?.role === 'admin' ? '/api/requests' : null);
   if (!user) return null;
@@ -147,6 +149,14 @@ export default function MorePage() {
             ))}
           </div>
         </div>
+        <button className="row" onClick={() => setInstall(true)}>
+          <IconSmartphone className="ico" />
+          <div className="grow">
+            <div className="name">Install app</div>
+            <div className="meta">Add to iPhone or Android home screen</div>
+          </div>
+          <IconChevronR className="ico" />
+        </button>
         <button className="row" onClick={() => setPw(true)}>
           <IconLock className="ico" />
           <div className="grow name">Change password</div>
@@ -163,6 +173,7 @@ export default function MorePage() {
 
       {pw && <ChangePassword onClose={() => setPw(false)} />}
       {tg && <TelegramSheet onClose={() => setTg(false)} />}
+      {install && <InstallSheet onClose={() => setInstall(false)} />}
     </div>
   );
 }
