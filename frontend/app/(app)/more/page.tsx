@@ -5,6 +5,7 @@ import { IconBell, IconChevronR, IconDatabase, IconFilm, IconHistory, IconLock, 
 import { InstallSheet } from '@/components/InstallPrompt';
 import { Notice, Sheet, useToast } from '@/components/ui';
 import { api, downloadFile, useFetch } from '@/lib/api';
+import { useAuth } from '@/components/Auth';
 import { initials } from '@/lib/dates';
 import { ROLE_LABEL } from '@/lib/labels';
 import { ThemeMode, useTheme } from '@/lib/theme';
@@ -49,7 +50,7 @@ export default function MorePage() {
         <div style={{ minWidth: 0 }}>
           <div className="h2">{user.name}</div>
           <div className="muted small">
-            {ROLE_LABEL[user.role]} · @{user.username}
+            {(ROLE_LABEL as Record<string, string>)[user.role] ?? user.role} · @{user.username}
           </div>
           {user.phone && <div className="muted small">{user.phone}</div>}
         </div>
