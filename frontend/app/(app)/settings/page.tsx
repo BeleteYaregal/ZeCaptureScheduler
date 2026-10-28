@@ -5,7 +5,7 @@ import { useAuth } from '@/components/Auth';
 import { IconChevronL } from '@/components/Icons';
 import { ErrorBox, Loading, Notice, Stepper, Switch, useToast } from '@/components/ui';
 import { api, useFetch } from '@/lib/api';
-import type { Settings } from '@/lib/types';
+import type { Settings, User } from '@/lib/types';
 import Link from 'next/link';
 
 export default function SettingsPage() {
@@ -13,6 +13,7 @@ export default function SettingsPage() {
   const router = useRouter();
   const toast = useToast();
   const { data, error, loading, reload } = useFetch<{ settings: Settings }>('/api/settings');
+  const vids = useFetch<{ users: User[] }>('/api/users?role=videographer&active=true');
   const [s, setS] = useState<Settings | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -81,6 +82,49 @@ export default function SettingsPage() {
               <Notice kind="error">Sales days and company days cannot add up to more than 7.</Notice>
             </div>
           )}
+
+          <h2 className="h2" style={{ margin: '26px 0 4px' }}>Standard week</h2>
+          <p className="small muted" style={{ marginBottom: 10 }}>Set it once. The Planner applies it to any week, or to the next few months, in one tap.</p>
+          <div className="list">
+            {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((name, i) => (
+              <div key={name} className="planrow">
+                <div className="d">{name.slice(0, 3)}</div>
+                <div className="seg">
+                  {(['off', 'sales', 'company'] as const).map((k) => (
+                    <button
+                      key={k}
+                      data-kind={k === 'off' ? undefined : k}
+                      aria-pressed={s.week_pattern[i] === k}
+                      onClick={() => set('week_pattern', s.week_pattern.map((x, j) => (j === i ? k : x)))}
+                    >
+                      {k === 'off' ? 'Off' : k === 'sales' ? 'Sales' : 'Company'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+            <Row title="Usual videographer" hint="Used when the standard week is applied">
+              <select className="select" style={{ width: 170 }} value={s.default_videographer_id ?? ''} onChange={(e) => set('default_videographer_id', e.target.value ? Number(e.target.value) : null)} aria-label="Usual videographer">
+                <option value="">Not set</option>
+                {vids.data?.users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+            </Row>
+          </div>
+          {(() => {
+            const sn = s.week_pattern.filter((x) => x === 'sales').length;
+            const cn = s.week_pattern.filter((x) => x === 'company').length;
+            return sn > s.sales_days_per_week || cn > s.company_days_per_week ? (
+              <div style={{ marginTop: 10 }}>
+                <Notice kind="error">
+                  The standard week has {sn} sales and {cn} company days. Raise the limits above or change the week.
+                </Notice>
+              </div>
+            ) : null;
+          })()}
 
           <h2 className="h2" style={{ margin: '26px 0 10px' }}>Teams</h2>
           <div className="list">

@@ -9,7 +9,7 @@ export const STATUS_LABEL: Record<BookingStatus, string> = {
 };
 
 export const ROLE_LABEL: Record<Role, string> = {
-  admin: 'Admin',
+  admin: 'Marketing manager',
   sales: 'Salesperson',
   videographer: 'Videographer',
   supervisor: 'Supervisor',
@@ -25,6 +25,7 @@ const ACTION_LABEL: Record<string, string> = {
   'manager.update': 'Updated a sales manager',
   'supervisor.create': 'Added a supervisor',
   'supervisor.update': 'Updated a supervisor',
+  'plan.auto': 'Applied the standard week',
   'plan.save': 'Saved the week plan',
   'schedule.generate': 'Generated a schedule',
   'schedule.publish': 'Published a schedule',

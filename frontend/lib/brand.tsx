@@ -7,7 +7,7 @@ export interface Brand {
   color: string;
   logo: string | null;
 }
-export const DEFAULT_BRAND: Brand = { name: 'Callsheet', color: '#1a56db', logo: null };
+export const DEFAULT_BRAND: Brand = { name: 'CaptureSheet', color: '#1a56db', logo: null };
 const KEY = 'callsheet.brand';
 
 interface BrandState {
@@ -33,6 +33,27 @@ export function BrandProvider({ children }: { children: ReactNode }) {
   const apply = useCallback((b: Brand) => {
     document.documentElement.style.setProperty('--brand', b.color);
     document.title = b.name;
+
+    // The icons must be the logo of the branding
+    if (typeof window !== 'undefined') {
+      const iconUrl = b.logo || '/api/branding/icon';
+      let iconLink = document.querySelector("link[rel='icon']") as HTMLLinkElement;
+      if (!iconLink) {
+        iconLink = document.createElement('link');
+        iconLink.rel = 'icon';
+        document.head.appendChild(iconLink);
+      }
+      iconLink.href = iconUrl;
+
+      let appleIconLink = document.querySelector("link[rel='apple-touch-icon']") as HTMLLinkElement;
+      if (!appleIconLink) {
+        appleIconLink = document.createElement('link');
+        appleIconLink.rel = 'apple-touch-icon';
+        document.head.appendChild(appleIconLink);
+      }
+      appleIconLink.href = iconUrl;
+    }
+
     try {
       localStorage.setItem(KEY, JSON.stringify(b));
     } catch {

@@ -62,7 +62,7 @@ export default function DaysOffPage() {
       <div className="page-head">
         <div>
           <h1 className="title">Days off</h1>
-          <p className="subtitle">Tell the admin when you cannot be captured</p>
+          <p className="subtitle">Tell the marketing manager when you cannot be captured</p>
         </div>
       </div>
 

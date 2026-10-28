@@ -17,6 +17,8 @@ import {
   rescheduleBooking,
   savePlan,
   setBookingStatus,
+  setDayType,
+  setVideographer,
   setEditing,
   shiftBooking,
   swapBookings,
@@ -42,6 +44,9 @@ weeksRouter.put(
     res.json(await savePlan(req.user!, req.params.weekStart, req.body));
   })
 );
+
+weeksRouter.put('/days/:date', requireRole('admin'), wrap(async (req, res) => res.json(await setDayType(req.user!, req.params.date, req.body))));
+weeksRouter.put('/videographer', requireRole('admin'), wrap(async (req, res) => res.json(await setVideographer(req.user!, req.body))));
 
 weeksRouter.post(
   '/weeks/auto',

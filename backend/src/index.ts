@@ -1,4 +1,4 @@
-import './loadEnv';
+import './loadEnv'; // must be first: loads backend/.env before the config is read
 import bcrypt from 'bcryptjs';
 import { createApp } from './app';
 import { config } from './config';
@@ -25,7 +25,7 @@ async function main() {
   await ensureAdmin();
   const app = createApp();
   app.listen(config.port, '0.0.0.0', () => {
-    console.log(`Capture Scheduler API running on http://localhost:${config.port}  (timezone ${config.timezone})`);
+    console.log(`CaptureSheet API running on http://localhost:${config.port}  (timezone ${config.timezone})`);
   });
   void startTelegramPolling();
 }

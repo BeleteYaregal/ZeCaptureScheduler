@@ -28,6 +28,24 @@ export function createApp() {
       next(e);
     }
   });
+  app.get('/api/branding/icon', async (_req, res, next) => {
+    try {
+      const b = await getBranding();
+      if (b.logo && b.logo.startsWith('data:image/')) {
+        const matches = b.logo.match(/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/);
+        if (matches) {
+          const mime = matches[1] === 'jpeg' ? 'image/jpeg' : `image/${matches[1]}`;
+          const buffer = Buffer.from(matches[2], 'base64');
+          res.set('Content-Type', mime);
+          res.set('Cache-Control', 'public, max-age=600');
+          return res.send(buffer);
+        }
+      }
+      res.redirect('/icon-192.png');
+    } catch (e) {
+      next(e);
+    }
+  });
   app.use('/api/auth', authRouter);
   app.use('/api', weeksRouter);
   app.use('/api', adminRouter);

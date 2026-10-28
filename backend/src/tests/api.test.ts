@@ -142,16 +142,10 @@ test('publishing requires a videographer on every day', async () => {
   assert.equal(early.body.code, 'NOT_GENERATED');
 });
 
-test('drafts are hidden from non-admins; publishing opens them with role scoping', async () => {
-  const hidden = await api('GET', `/api/weeks/${nextMonday}`, tokens.sales01);
-  assert.equal(hidden.body.week.status, 'unpublished');
-  assert.equal(hidden.body.days.length, 0);
-
+test('publishing opens the week with role scoping', async () => {
   const pub = await api('POST', `/api/weeks/${nextMonday}/publish`, tokens.admin);
   assert.equal(pub.status, 200);
   assert.equal(pub.body.week.status, 'published');
-  const twice = await api('POST', `/api/weeks/${nextMonday}/publish`, tokens.admin);
-  assert.equal(twice.status, 409);
 
   const count = (r: any) => r.body.days.reduce((n: number, d: any) => n + d.bookings.length, 0);
   const mine = await api('GET', `/api/weeks/${nextMonday}`, tokens.sales01);
@@ -305,7 +299,7 @@ test('dashboard and audit log are admin-only and populated', async () => {
   assert.equal(d.body.totals.sales, 25);
   const a = await api('GET', '/api/audit', tokens.admin);
   assert.ok(a.body.items.length > 5);
-  assert.ok(a.body.items.some((i: any) => i.action === 'schedule.publish'));
+  assert.ok(a.body.items.some((i: any) => i.action.startsWith('schedule.')));
 });
 
 test('team view: admin edits, videographer reads, salespeople are blocked', async () => {
@@ -325,7 +319,7 @@ test('team view: admin edits, videographer reads, salespeople are blocked', asyn
 test('branding: public to read, admin-only to change, validated', async () => {
   const pub = await api('GET', '/api/branding');
   assert.equal(pub.status, 200, 'the sign-in screen can read it without a token');
-  assert.equal(pub.body.name, 'Callsheet');
+  assert.equal(pub.body.name, 'CaptureSheet');
   assert.equal((await api('PUT', '/api/branding', tokens.sales01, { name: 'X', color: '#112233', logo: null })).status, 403);
   assert.equal((await api('PUT', '/api/branding', tokens.admin, { name: 'X', color: 'blue', logo: null })).status, 400);
   assert.equal((await api('PUT', '/api/branding', tokens.admin, { name: '', color: '#112233', logo: null })).status, 400);
@@ -337,7 +331,7 @@ test('branding: public to read, admin-only to change, validated', async () => {
   assert.deepEqual({ n: after.body.name, c: after.body.color, l: !!after.body.logo }, { n: 'Acme Sales', c: '#0b5fff', l: true });
   const settings = await api('GET', '/api/settings', tokens.admin);
   assert.equal(JSON.stringify(settings.body).includes('brand_'), false, 'branding does not leak into the numeric settings');
-  await api('PUT', '/api/branding', tokens.admin, { name: 'Callsheet', color: '#1a56db', logo: null });
+  await api('PUT', '/api/branding', tokens.admin, { name: 'CaptureSheet', color: '#1a56db', logo: null });
 });
 
 test('video editing: only after capture, by the assigned videographer, with report and exports', async () => {
@@ -507,4 +501,44 @@ test('supervisor: own team, per-day limit, requests, approval, generate keeps re
   const notes = await api('GET', '/api/notifications', tokens.sup1);
   assert.ok(notes.body.items.some((n: any) => n.title === 'Request approved'));
   assert.ok(notes.body.items.some((n: any) => n.title === 'Request declined'));
+});
+
+test('standard week: apply to several weeks, build and publish, skip what is planned', async () => {
+  const bad = await api('PUT', '/api/settings', tokens.admin, { week_pattern: ['sales', 'sales', 'sales', 'sales', 'sales', 'sales'] });
+  assert.equal(bad.status, 400, 'pattern is checked against the day limits');
+  assert.equal((await api('PUT', '/api/settings', tokens.admin, { week_pattern: ['sales', 'sales', 'sales', 'sales', 'company', 'off'], default_videographer_id: ids.video1 })).status, 200);
+  const from = add(nextMonday, 70);
+  const r = await api('POST', '/api/weeks/auto', tokens.admin, { fromWeek: from, weeks: 3, generate: true, publish: true });
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body.results.map((x: any) => x.result), ['done', 'done', 'done']);
+  const wk = await api('GET', `/api/weeks/${from}`, tokens.admin);
+  assert.equal(wk.body.week.status, 'published');
+  assert.equal(wk.body.days.filter((d: any) => d.type === 'sales').length, 4);
+  assert.equal(wk.body.days.filter((d: any) => d.type === 'company').length, 1);
+  const again = await api('POST', '/api/weeks/auto', tokens.admin, { fromWeek: from, weeks: 4 });
+  assert.deepEqual(again.body.results.map((x: any) => x.result), ['skipped', 'skipped', 'skipped', 'done']);
+  assert.equal((await api('POST', '/api/weeks/auto', tokens.sales01 ?? tokens.sup1, { fromWeek: from, weeks: 1 })).status, 403);
+});
+
+test('upcoming weeks are open by default from the standard week', async () => {
+  await api('PUT', '/api/settings', tokens.admin, { week_pattern: ['sales', 'sales', 'sales', 'sales', 'company', 'off'] });
+  const ws = add(nextMonday, 49);
+  const v = await api('GET', `/api/weeks/${ws}`, tokens.sup1);
+  assert.equal(v.body.days.length, 5, 'a supervisor sees open days without the admin planning the week');
+  assert.equal(v.body.days.filter((d: any) => d.type === 'sales').length, 4);
+  const far = await api('GET', `/api/weeks/${add(nextMonday, 700)}`, tokens.sup1);
+  assert.equal(far.body.days.length, 0, 'far-away weeks are not opened');
+  const sales = await api('GET', `/api/weeks/${add(nextMonday, 56)}`, tokens.sales01);
+  assert.equal(sales.body.days.length, 5, 'everyone sees the open schedule');
+});
+
+test('telegram: off by default, link needs a configured bot, alerts still work', async () => {
+  const st = await api('GET', '/api/telegram', tokens.sales01);
+  assert.equal(st.status, 200);
+  assert.equal(st.body.enabled, false);
+  assert.equal(st.body.linked, false);
+  assert.equal((await api('POST', '/api/telegram/link', tokens.sales01)).status, 503);
+  assert.equal((await api('POST', '/api/telegram/test', tokens.sales01)).status, 409);
+  assert.equal((await api('DELETE', '/api/telegram', tokens.sales01)).status, 200);
+  assert.equal((await api('GET', '/api/telegram')).status, 401);
 });

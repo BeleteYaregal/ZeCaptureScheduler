@@ -8,7 +8,7 @@ import { api } from '@/lib/api';
 import { timeAgo } from '@/lib/dates';
 import type { NotificationItem } from '@/lib/types';
 
-const PAGE = 4;
+const PAGE = 20;
 type Filter = 'all' | 'unread';
 interface Page {
   unread: number;

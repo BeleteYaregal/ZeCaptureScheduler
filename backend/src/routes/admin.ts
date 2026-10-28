@@ -347,7 +347,7 @@ adminRouter.post(
       include: [{ model: CaptureDay, as: 'day', required: true, where: { date: body.date, status: 'active' } }],
     });
     if (booked) {
-      warning = `You are already booked on ${prettyDay(body.date)}. The admin has been told and will move your booking.`;
+      warning = `You are already booked on ${prettyDay(body.date)}. The marketing manager has been told and will move your booking.`;
       const admins = await User.findAll({ where: { role: 'admin', active: true } });
       await notify(admins.map((a) => a.id), 'Availability conflict', `${target.name} cannot do ${prettyDay(body.date)} but is booked that day.`);
     }

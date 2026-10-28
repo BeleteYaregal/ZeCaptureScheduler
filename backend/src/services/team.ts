@@ -13,7 +13,7 @@ import { checkPlacement, OCCUPYING, recomputeSlots, removeFutureBookingsFor, wee
 /** The Supervisor record behind a supervisor login. */
 export async function mySupervisor(actor: User): Promise<Supervisor> {
   const sup = actor.supervisorId ? await Supervisor.findByPk(actor.supervisorId) : null;
-  if (!sup || !sup.active) throw new HttpError(403, 'Your supervisor profile is not active. Ask the admin.', 'FORBIDDEN');
+  if (!sup || !sup.active) throw new HttpError(403, 'Your supervisor profile is not active. Ask the marketing manager.', 'FORBIDDEN');
   return sup;
 }
 
@@ -129,7 +129,7 @@ export async function withdrawRequest(actor: User, bookingId: number) {
     throw new HttpError(404, 'Request not found');
   }
   if (b.status === 'planned' && b.day && (await weekIsPublished(b.day.weekStart)) && b.day.date <= todayIn(config.timezone)) {
-    throw new HttpError(409, 'That day has started. Ask the admin to change it.', 'BAD_STATUS');
+    throw new HttpError(409, 'That day has started. Ask the marketing manager to change it.', 'BAD_STATUS');
   }
   const was = b.status;
   const day = b.day!;

@@ -30,7 +30,7 @@ async function call<T = any>(method: string, body: object = {}, timeoutMs = 1500
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-const BRAND = process.env.TELEGRAM_BRAND || 'ZeCaptureSheet';
+const BRAND = process.env.TELEGRAM_BRAND || 'CaptureSheet';
 const LINE = '━━━━━━━━━━━━━━';
 
 /** Icon and label for each kind of alert. Unknown titles fall back to a plain notice. */
@@ -56,6 +56,26 @@ function fields(body: string): { date?: string; time?: string; rest: string } {
   const time = body.match(/\b\d{2}:\d{2}\b/)?.[0];
   return { date, time, rest: body };
 }
+
+/**
+ * Only important alerts go to Telegram; everything else stays in the app.
+ *  - Personal chats: anything that changes someone's own date.
+ *  - Shared group: only what needs the marketing manager's attention.
+ * Edit these two lists to change what is sent.
+ */
+const PERSONAL = new Set([
+  'Capture scheduled',
+  'Capture moved',
+  'Capture changed',
+  'Capture rescheduled',
+  'Capture cancelled',
+  'Request approved',
+  'Request declined',
+  'New booking request',
+  'Capture missed',
+  'Availability conflict',
+]);
+const GROUP = new Set(['New booking request', 'Capture missed', 'Availability conflict', 'Booking cancelled by supervisor']);
 
 /** Premium layout: brand line, headline, key details as fields, short sentence, footer. */
 function format(title: string, body?: string, audience?: string, name?: string): string {
@@ -106,15 +126,18 @@ function postToGroup(text: string) {
 /** Called for every alert. Never throws and never slows the request down. */
 export function pushTelegram(userIds: number[], title: string, body: string): void {
   if (!telegramEnabled() || !userIds.length) return;
+  const toGroup = GROUP.has(title);
+  const toPeople = PERSONAL.has(title);
+  if (!toGroup && !toPeople) return; // not important enough for Telegram
   void (async () => {
     try {
       const users = await User.findAll({ where: { id: userIds } });
       const names = users.map((u) => u.name);
-      if (process.env.TELEGRAM_CHAT_ID) {
+      if (toGroup && process.env.TELEGRAM_CHAT_ID) {
         const who = names.length > 3 ? `${names.slice(0, 3).join(', ')} +${names.length - 3}` : names.join(', ');
         postToGroup(format(title, body, who));
       }
-      for (const u of users) {
+      for (const u of toPeople ? users : []) {
         if (!u.telegramChatId || u.telegramChatId === process.env.TELEGRAM_CHAT_ID) continue;
         await sendTelegram(u.telegramChatId, title, body, u.name).catch((e) => console.warn(`Telegram send to ${u.username} failed:`, e.message));
       }
@@ -171,11 +194,6 @@ export async function startTelegramPolling(): Promise<void> {
     if (!botName) botName = me.username;
     await call('deleteWebhook'); // polling and webhooks cannot be used together
     console.log(`Telegram bot @${telegramBot()} is on.${process.env.TELEGRAM_CHAT_ID ? ` Every alert is also posted to chat ${process.env.TELEGRAM_CHAT_ID}.` : ' People connect it in the app: More > Telegram alerts.'}`);
-    if (process.env.TELEGRAM_CHAT_ID) {
-      await sendTelegram(process.env.TELEGRAM_CHAT_ID, 'Alerts connected', 'Schedule alerts from the app will be posted in this chat.').catch((e) =>
-        console.warn('Could not post to TELEGRAM_CHAT_ID. Is the bot in that chat, and did you press Start?', e.message)
-      );
-    }
   } catch (e: any) {
     console.warn('Telegram is not working, check TELEGRAM_BOT_TOKEN:', e.message);
     running = false;

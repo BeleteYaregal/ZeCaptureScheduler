@@ -7,7 +7,7 @@ export interface Branding {
   logo: string | null;
 }
 
-export const DEFAULT_BRANDING: Branding = { name: 'Callsheet', color: '#1a56db', logo: null };
+export const DEFAULT_BRANDING: Branding = { name: 'CaptureSheet', color: '#1a56db', logo: null };
 
 const KEYS = { name: 'brand_name', color: 'brand_color', logo: 'brand_logo' } as const;
 

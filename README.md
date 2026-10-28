@@ -1,4 +1,4 @@
-# Callsheet
+# CaptureSheet
 
 Schedule a videographer to capture your company's sales team. Built for phones first: it opens like a mobile app, installs to the home screen, and works on a desktop too.
 
@@ -10,17 +10,17 @@ Only three kinds of accounts exist:
 
 | Role | What they do |
 |---|---|
-| **Admin** | Builds the teams, registers every salesperson and videographer, plans each week, publishes, adjusts, sees insights. |
+| **Marketing manager** | Builds the teams, registers every salesperson and videographer, plans each week, publishes, adjusts, sees insights. |
 | **Videographer** | Sees the days assigned to them, grouped **By time** or **By team** (sales manager, then supervisor). Marks captures done or missed. |
-| **Salesperson** | Sees their own next capture, the week, and can add days off. Registered by the admin only. |
+| **Salesperson** | Sees their own next capture, the week, and can add days off. Registered by the marketing manager only. |
 
-**Sales managers and supervisors are not accounts.** They are team groups the admin creates:
+**Sales managers and supervisors are not accounts.** They are team groups the marketing manager creates:
 
 ```
 Sales manager  ->  Supervisor  ->  Salespeople (up to 12 per supervisor, changeable)
 ```
 
-Everything requires sign-in. Only the admin can register people.
+Everything requires sign-in. Only the marketing manager can register people.
 
 ## What's new in this version
 
@@ -31,7 +31,7 @@ Everything requires sign-in. Only the admin can register people.
 - **Alert pop-ups.** Unread alerts pop up right after sign-in, and again whenever a new one arrives while the app is open (checked every 30 seconds and when you return to the tab).
 - **Centered sign-in screen** that shows your logo and name.
 - **Backup (admin).** *More > Download backup* gives a consistent copy of the whole database (SQLite).
-- The admin is alerted when the videographer marks a capture as missed.
+- The marketing manager is alerted when the videographer marks a capture as missed.
 
 ## Run it
 
@@ -53,7 +53,7 @@ Open http://localhost:3000. On a phone on the same Wi-Fi, open `http://<your-com
 | Videographer (demo) | `video1` | `demo1234` |
 | Salesperson (demo) | `sales01` to `sales24` | `demo1234` |
 
-Without `seed:demo`, the first start creates only the admin. Then build the teams yourself in the **Team** tab. Change the admin password under **More > Change password**.
+Without `seed:demo`, the first start creates only the marketing manager. Then build the teams yourself in the **Team** tab. Change the marketing manager password under **More > Change password**.
 
 `npm run seed` creates the same people without the demo weeks. Both **reset the database**, so never run them on live data.
 

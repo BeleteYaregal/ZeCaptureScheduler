@@ -31,7 +31,7 @@ async function hash(pw: string) {
 
 export async function seedUsers() {
   const demoHash = await hash('demo1234');
-  const admin = await User.create({ name: 'Administrator', username: 'admin', passwordHash: await hash('admin1234'), role: 'admin', phone: '0911000000' });
+  const admin = await User.create({ name: 'Marketing Manager', username: 'admin', passwordHash: await hash('admin1234'), role: 'admin', phone: '0911000000' });
   // Sales managers and supervisors are team groups, not accounts: no username or password.
   const managers: Manager[] = [];
   for (let i = 0; i < MANAGERS.length; i++) {
@@ -108,7 +108,7 @@ async function main() {
   const { admin, video, sales } = await seedUsers();
   if (demo) await seedDemoWeeks(admin, video, sales);
   console.log(`Seeded ${await User.count()} users${demo ? ' and 3 demo weeks' : ''}.`);
-  console.log('Logins: admin / admin1234 | video1 / demo1234 | sales01..sales24 / demo1234');
+  console.log('Logins: admin (Marketing manager) / admin1234 | video1 / demo1234 | sales01..sales24 / demo1234');
 }
 
 if (require.main === module) {

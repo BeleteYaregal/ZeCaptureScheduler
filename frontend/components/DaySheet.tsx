@@ -26,7 +26,6 @@ export default function DaySheet({ day, week, role, userId, published, onChanged
   const [grouped, setGrouped] = useState(!!defaultGrouped);
   const [shown, setShown] = useState(PAGE);
   const [open, setOpen] = useState<BookingView | null>(null);
-  const [dayMenu, setDayMenu] = useState<null | 'add' | 'cancel'>(null);
   const isAdmin = role === 'admin';
   const today = todayStr();
   const live = day.bookings.filter((b) => b.status !== 'rescheduled');
@@ -174,19 +173,6 @@ export default function DaySheet({ day, week, role, userId, published, onChanged
         </div>
       )}
 
-      {isAdmin && !cancelled && (
-        <div className="sheet-foot">
-          {day.type === 'sales' && (
-            <button className="btn btn-soft btn-sm" onClick={() => setDayMenu('add')}>
-              <IconPlus /> Add person
-            </button>
-          )}
-          <button className="btn btn-ghost btn-sm" onClick={() => setDayMenu('cancel')}>
-            Cancel this day
-          </button>
-        </div>
-      )}
-
       {open && (
         <BookingMenu
           booking={open}
@@ -199,8 +185,6 @@ export default function DaySheet({ day, week, role, userId, published, onChanged
           onChanged={onChanged}
         />
       )}
-      {dayMenu === 'add' && <AddPerson day={day} week={week} onClose={() => setDayMenu(null)} onChanged={onChanged} />}
-      {dayMenu === 'cancel' && <CancelDay day={day} onClose={() => setDayMenu(null)} onChanged={onChanged} />}
     </section>
   );
 }
@@ -479,29 +463,6 @@ function BookingMenu({
             <IconCheck /> Set back to booked
           </button>
         )}
-        {isAdmin && planned && (
-          <>
-            {otherDays.length > 0 && (
-              <button className="action" onClick={() => setMode('move')}>
-                <IconMove /> Move to another day
-              </button>
-            )}
-            <button className="action" onClick={() => setMode('swap')}>
-              <IconSwap /> Swap with someone
-            </button>
-            <button className="action" disabled={busy} onClick={() => run(() => api(`/api/bookings/${booking.id}/shift`, { method: 'POST', body: { direction: 'up' } }), 'Moved earlier')}>
-              <IconUp /> Move earlier in the day
-            </button>
-            <button className="action" disabled={busy} onClick={() => run(() => api(`/api/bookings/${booking.id}/shift`, { method: 'POST', body: { direction: 'down' } }), 'Moved later')}>
-              <IconDown /> Move later in the day
-            </button>
-          </>
-        )}
-        {isAdmin && (
-          <button className="action" data-kind="danger" onClick={() => setMode('remove')}>
-            <IconTrash /> Remove from schedule
-          </button>
-        )}
       </div>
     </Sheet>
   );
@@ -549,74 +510,3 @@ function DayPicker({
 }
 
 /* ------------------------------------------------------------ add a person / cancel a day */
-
-function AddPerson({ day, week, onClose, onChanged }: { day: DayView; week: WeekView; onClose: () => void; onChanged: () => void }) {
-  const { busy, err, run } = useAct(onChanged, onClose);
-  const [chosen, setChosen] = useState<number | null>(null);
-  return (
-    <Sheet title="Add a person" subtitle={`${longDay(day.date)}`} onClose={onClose}>
-      {err && <ErrorWithOverride err={err} busy={busy} onForce={chosen ? () => run(() => api('/api/bookings', { method: 'POST', body: { salesId: chosen, captureDayId: day.id, override: true } }), 'Added to the schedule') : undefined} />}
-      {week.unscheduled.length === 0 ? (
-        <Notice kind="good">Everyone already has a capture this week.</Notice>
-      ) : (
-        <div className="list" style={{ maxHeight: '55dvh', overflowY: 'auto' }}>
-          {week.unscheduled.map((p) => (
-            <button
-              key={p.id}
-              className="row"
-              disabled={busy}
-              onClick={() => {
-                setChosen(p.id);
-                run(() => api('/api/bookings', { method: 'POST', body: { salesId: p.id, captureDayId: day.id } }), `${p.name} added`);
-              }}
-            >
-              <span className="avatar">{p.name.split(' ').map((x) => x[0]).slice(0, 2).join('')}</span>
-              <div className="grow">
-                <div className="name">{p.name}</div>
-                <div className="meta">{p.supervisorName ?? 'No supervisor'}</div>
-              </div>
-              <IconPlus className="ico" />
-            </button>
-          ))}
-        </div>
-      )}
-    </Sheet>
-  );
-}
-
-function CancelDay({ day, onClose, onChanged }: { day: DayView; onClose: () => void; onChanged: () => void }) {
-  const { busy, err, run } = useAct(onChanged, onClose);
-  const [reason, setReason] = useState('');
-  const n = day.bookings.filter((b) => b.status === 'planned').length;
-  return (
-    <Sheet title={`Cancel ${shortDay(day.date)}?`} subtitle={day.type === 'sales' && n ? `${n} people are booked. We will try to rebook each one on the next free sales day.` : undefined} onClose={onClose}>
-      {err && <ErrorWithOverride err={err} busy={busy} />}
-      <label className="field">
-        <span className="label">Reason (optional)</span>
-        <input className="input" value={reason} maxLength={120} onChange={(e) => setReason(e.target.value)} placeholder="For example: videographer is sick" />
-      </label>
-      <div className="btn-row">
-        <button className="btn btn-ghost" onClick={onClose}>
-          Keep the day
-        </button>
-        <button
-          className="btn btn-danger"
-          disabled={busy}
-          onClick={() =>
-            run(
-              () => api<any>(`/api/days/${day.id}/cancel`, { method: 'POST', body: { reason: reason || undefined } }),
-              (r) => `Day cancelled. ${r.moved.length} rebooked${r.unplaced.length ? `, ${r.unplaced.length} need a new date` : ''}`
-            )
-          }
-        >
-          Cancel day
-        </button>
-      </div>
-      {day.type === 'sales' && n > 0 && (
-        <p className="hint" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <IconWarn width={16} height={16} /> People who cannot be rebooked are told a new date will follow.
-        </p>
-      )}
-    </Sheet>
-  );
-}

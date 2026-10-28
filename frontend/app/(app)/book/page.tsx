@@ -45,7 +45,7 @@ export default function BookPage() {
         <div>
           <h1 className="title">Book your team</h1>
           <p className="subtitle">
-            Up to {limit} people per day. The admin approves each request.
+            Up to {limit} people per day. The marketing manager approves each request.
           </p>
         </div>
       </div>
@@ -91,7 +91,7 @@ export default function BookPage() {
               <div key={b.id} className="row">
                 <div className="grow name">{b.person.name}</div>
                 <span className={`pill ${b.status === 'requested' ? '' : `pill-${b.status === 'planned' ? 'sales' : b.status}`}`}>
-                  {b.status === 'requested' ? 'Waiting for admin' : b.status === 'planned' ? 'Approved' : b.status === 'done' ? 'Done' : 'Missed'}
+                  {b.status === 'requested' ? 'Waiting for approval' : b.status === 'planned' ? 'Approved' : b.status === 'done' ? 'Done' : 'Missed'}
                 </span>
                 {(b.status === 'requested' || b.status === 'planned') && (
                   <button className="btn btn-ghost btn-sm" onClick={() => withdraw(b.id)}>
@@ -134,7 +134,7 @@ function RequestSheet({ day, members, busy, room, onClose, onDone }: { day: DayV
     try {
       const r = await api<{ created: unknown[]; failed: { name: string; error: string }[] }>('/api/team/requests', { method: 'POST', body: { salesIds: sel, captureDayId: day.id } });
       if (r.failed.length) setErrs(r.failed.map((f) => `${f.name}: ${f.error}`));
-      if (r.created.length) toast(`${r.created.length} sent to the admin`);
+      if (r.created.length) toast(`${r.created.length} sent for approval`);
       if (!r.failed.length) onDone();
       else if (r.created.length) setSel([]);
     } catch (e: any) {

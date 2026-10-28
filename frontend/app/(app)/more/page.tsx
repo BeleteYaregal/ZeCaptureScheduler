@@ -2,8 +2,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useAuth } from '@/components/Auth';
-import { IconBell, IconChevronR, IconDatabase, IconFilm, IconHistory, IconLock, IconLogout, IconPalette, IconReport, IconSend, IconSettings, IconSmartphone } from '@/components/Icons';
-import { InstallSheet } from '@/components/InstallPrompt';
+import { IconBell, IconChevronR, IconDatabase, IconFilm, IconHistory, IconLock, IconLogout, IconPalette, IconReport, IconSend, IconSettings } from '@/components/Icons';
 import { Notice, Sheet, useToast } from '@/components/ui';
 import { api, downloadFile, useFetch } from '@/lib/api';
 import { initials } from '@/lib/dates';
@@ -22,17 +21,14 @@ export default function MorePage() {
   const toast = useToast();
   const [pw, setPw] = useState(false);
   const [tg, setTg] = useState(false);
-  const [install, setInstall] = useState(false);
   const [busy, setBusy] = useState(false);
-  const reqs = useFetch<{ items: unknown[] }>(user?.role === 'admin' ? '/api/requests' : null);
   if (!user) return null;
-  const pending = reqs.data?.items.length ?? 0;
   const isAdmin = user.role === 'admin';
 
   async function backup() {
     setBusy(true);
     try {
-      await downloadFile('/api/backup', 'callsheet-backup.sqlite');
+      await downloadFile('/api/backup', 'capturesheet-backup.sqlite');
       toast('Backup downloaded');
     } catch (e: any) {
       toast(e.message || 'Could not create the backup', 'error');
@@ -94,12 +90,6 @@ export default function MorePage() {
               </div>
               <IconChevronR className="ico" />
             </Link>
-            <Link href="/requests" className="row">
-              <IconSend className="ico" />
-              <div className="grow name">Supervisor requests</div>
-              {pending > 0 && <span className="pill pill-live">{pending} new</span>}
-              <IconChevronR className="ico" />
-            </Link>
             <Link href="/audit" className="row">
               <IconHistory className="ico" />
               <div className="grow">
@@ -149,14 +139,6 @@ export default function MorePage() {
             ))}
           </div>
         </div>
-        <button className="row" onClick={() => setInstall(true)}>
-          <IconSmartphone className="ico" />
-          <div className="grow">
-            <div className="name">Install app</div>
-            <div className="meta">Add to iPhone or Android home screen</div>
-          </div>
-          <IconChevronR className="ico" />
-        </button>
         <button className="row" onClick={() => setPw(true)}>
           <IconLock className="ico" />
           <div className="grow name">Change password</div>
@@ -173,7 +155,6 @@ export default function MorePage() {
 
       {pw && <ChangePassword onClose={() => setPw(false)} />}
       {tg && <TelegramSheet onClose={() => setTg(false)} />}
-      {install && <InstallSheet onClose={() => setInstall(false)} />}
     </div>
   );
 }
@@ -250,7 +231,7 @@ function TelegramSheet({ onClose }: { onClose: () => void }) {
     <Sheet title="Telegram alerts" subtitle="Every alert you get in the app also arrives in Telegram." onClose={onClose}>
       {err && <Notice kind="error">{err}</Notice>}
       {loading && !data && <p className="muted">Loading…</p>}
-      {data && !data.enabled && <Notice>Telegram is not set up yet. The admin must add the bot token on the server.</Notice>}
+      {data && !data.enabled && <Notice>Telegram is not set up yet. Ask your system owner to add the bot token on the server.</Notice>}
       {data?.enabled && data.linked && (
         <>
           <Notice kind="good">Connected. Your alerts arrive in Telegram.</Notice>

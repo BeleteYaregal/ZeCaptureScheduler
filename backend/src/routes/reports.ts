@@ -118,10 +118,10 @@ reportsRouter.get(
   requireRole('admin'),
   wrap(async (req, res) => {
     if (config.databaseUrl) throw new HttpError(400, 'Backups from the app work with the built-in SQLite database. Use your database tool for PostgreSQL or MySQL.');
-    const tmp = path.join(os.tmpdir(), `callsheet-backup-${Date.now()}.sqlite`);
+    const tmp = path.join(os.tmpdir(), `capturesheet-backup-${Date.now()}.sqlite`);
     await sequelize.query(`VACUUM INTO '${tmp.replace(/'/g, "''")}'`);
     await audit(req.user!.id, 'backup.download', 'system', null, {});
     const stamp = new Date().toISOString().slice(0, 10);
-    res.download(tmp, `callsheet-backup-${stamp}.sqlite`, () => fs.rm(tmp, () => {}));
+    res.download(tmp, `capturesheet-backup-${stamp}.sqlite`, () => fs.rm(tmp, () => {}));
   })
 );

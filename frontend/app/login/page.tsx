@@ -97,7 +97,7 @@ export default function LoginPage() {
             <span>Install on iPhone or Android</span>
           </button>
         </div>
-        <p className="faint small login-foot">Your admin creates your account. Forgot your password? Ask your admin to reset it.</p>
+        <p className="faint small login-foot">Your marketing manager creates your account. Forgot your password? Ask them to reset it.</p>
       </div>
 
       <p className="faint small login-copy">

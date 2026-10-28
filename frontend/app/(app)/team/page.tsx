@@ -721,7 +721,7 @@ function AccountForm({
 
 function CreatedSheet({ name, username, password, onClose }: { name: string; username: string; password: string; onClose: () => void }) {
   const toast = useToast();
-  const text = `Callsheet sign-in\nUsername: ${username}\nPassword: ${password}`;
+  const text = `CaptureSheet sign-in\nUsername: ${username}\nPassword: ${password}`;
   async function copy() {
     try {
       await navigator.clipboard.writeText(text);

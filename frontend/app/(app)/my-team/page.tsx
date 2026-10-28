@@ -36,7 +36,7 @@ export default function MyTeamPage() {
       </div>
       {error && <ErrorBox message={error} onRetry={reload} />}
       {loading && !data && <Loading rows={3} />}
-      {full && <Notice kind="info">Your team is full. Ask the admin to raise the limit in Settings.</Notice>}
+      {full && <Notice kind="info">Your team is full. Ask the marketing manager to raise the limit in Settings.</Notice>}
       {data && (
         <div className="list">
           {data.members.length === 0 && <p className="pad muted">Nobody yet. Register your first salesperson.</p>}

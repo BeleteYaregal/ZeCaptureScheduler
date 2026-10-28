@@ -238,6 +238,7 @@ p {
   border-radius: 14px;
 }
 .tab .ico {
+  position: relative;
   width: 56px;
   height: 30px;
   border-radius: 15px;
@@ -1550,7 +1551,7 @@ div > .slots {
   text-align: center;
 }
 .login .label {
-  text-align: left;
+  text-align: center;
 }
 .login .input {
   text-align: left;
@@ -1962,4 +1963,9 @@ div > .slots {
 .alert-pop-list small {
   color: var(--ink-3);
   font-size: 12.5px;
+}
+
+.tab .ico .badge {
+  top: -3px;
+  right: 4px;
 }

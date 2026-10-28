@@ -12,9 +12,13 @@ export interface User {
   active?: boolean;
 }
 
+export type DayKind = 'sales' | 'company' | 'off';
+
 export interface Settings {
   max_team_size: number;
   supervisor_max_per_day: number;
+  week_pattern: DayKind[];
+  default_videographer_id: number | null;
   sales_days_per_week: number;
   company_days_per_week: number;
   people_per_sales_day: number | null;

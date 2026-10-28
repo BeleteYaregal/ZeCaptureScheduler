@@ -7,11 +7,11 @@ import { BrandProvider } from '@/lib/brand';
 import { THEME_BOOT_SCRIPT, ThemeProvider } from '@/lib/theme';
 
 export const metadata: Metadata = {
-  title: 'Callsheet',
+  title: 'CaptureSheet',
   description: 'Schedule the videographer for your sales team',
   manifest: '/manifest.webmanifest',
-  appleWebApp: { capable: true, title: 'Callsheet', statusBarStyle: 'default' },
-  icons: { icon: '/icon.svg', apple: '/apple-touch-icon.png' },
+  appleWebApp: { capable: true, title: 'CaptureSheet', statusBarStyle: 'default' },
+  icons: { icon: '/api/branding/icon', apple: '/api/branding/icon' },
 };
 
 export const viewport: Viewport = {
@@ -20,7 +20,7 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 };
 
-const SW_REGISTER_SCRIPT = `
+const SW_SCRIPT = `
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
       navigator.serviceWorker.register('/sw.js').catch(function() {});
@@ -34,12 +34,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="Callsheet" />
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-        <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
-        <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
+        <link rel="apple-touch-icon" href="/api/branding/icon" />
+        <link rel="icon" href="/api/branding/icon" />
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
-        <script dangerouslySetInnerHTML={{ __html: SW_REGISTER_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: SW_SCRIPT }} />
       </head>
       <body>
         <ThemeProvider>

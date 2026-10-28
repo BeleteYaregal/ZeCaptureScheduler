@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { BrandLogo, useBrand } from '@/lib/brand';
 import { IconApple, IconCheck, IconPlusSquare, IconShare, IconSmartphone } from './Icons';
 import { Notice, Sheet, useToast } from './ui';
 
@@ -14,6 +15,7 @@ if (typeof window !== 'undefined') {
 
 export function InstallSheet({ onClose }: { onClose: () => void }) {
   const toast = useToast();
+  const { brand } = useBrand();
   const [platform, setPlatform] = useState<'ios' | 'android' | 'other'>('other');
   const [isSafari, setIsSafari] = useState(true);
   const [isStandalone, setIsStandalone] = useState(false);
@@ -66,7 +68,7 @@ export function InstallSheet({ onClose }: { onClose: () => void }) {
 
   return (
     <Sheet
-      title={platform === 'ios' ? 'Install on iPhone & iPad' : 'Install Callsheet App'}
+      title={platform === 'ios' ? `Install ${brand.name} on iPhone` : `Install ${brand.name}`}
       subtitle={
         isStandalone
           ? 'App is already installed'
@@ -76,6 +78,24 @@ export function InstallSheet({ onClose }: { onClose: () => void }) {
       }
       onClose={onClose}
     >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 14,
+          marginBottom: 16,
+          padding: '12px 14px',
+          background: 'var(--paper)',
+          borderRadius: 16,
+        }}
+      >
+        <BrandLogo size={46} radius={13} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: 16 }}>{brand.name}</div>
+          <div className="muted small">Home screen app · Fast one-tap access</div>
+        </div>
+      </div>
+
       {isStandalone ? (
         <div style={{ textAlign: 'center', padding: '16px 0' }}>
           <div
