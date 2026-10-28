@@ -10,16 +10,7 @@ import { User } from '../models';
  * there, with the name of the person it was for. No one needs to connect anything.
  * The server calls Telegram by long polling, so no public URL or HTTPS is needed.
  */
-const token = () =>
-  (process.env.TELEGRAM_BOT_TOKEN || '')
-    .trim()
-    .replace(/^["']|["']$/g, '')
-    .replace(/^bot/i, '');
-
-const groupChatId = () =>
-  (process.env.TELEGRAM_CHAT_ID || '')
-    .trim()
-    .replace(/^["']|["']$/g, '');
+const token = () => process.env.TELEGRAM_BOT_TOKEN || '';
 let botName = process.env.TELEGRAM_BOT_USERNAME || '';
 
 export const telegramEnabled = () => !!token();
@@ -39,9 +30,55 @@ async function call<T = any>(method: string, body: object = {}, timeoutMs = 1500
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-export async function sendTelegram(chatId: string, title: string, body?: string): Promise<void> {
+const BRAND = process.env.TELEGRAM_BRAND || 'Callsheet';
+const LINE = '━━━━━━━━━━━━━━';
+
+/** Icon and label for each kind of alert. Unknown titles fall back to a plain notice. */
+const KINDS: Record<string, [string, string]> = {
+  'Capture scheduled': ['📅', 'SCHEDULED'],
+  'Capture moved': ['🔄', 'DATE CHANGED'],
+  'Capture changed': ['🔄', 'DATE CHANGED'],
+  'Time changed': ['⏰', 'TIME CHANGED'],
+  'Capture rescheduled': ['🔁', 'RESCHEDULED'],
+  'Capture cancelled': ['🚫', 'CANCELLED'],
+  'Capture missed': ['⚠️', 'ATTENTION'],
+  'Your video is edited': ['🎬', 'VIDEO READY'],
+  'New booking request': ['📥', 'APPROVAL NEEDED'],
+  'Booking cancelled by supervisor': ['🚫', 'CANCELLED'],
+  'Request approved': ['✅', 'APPROVED'],
+  'Request declined': ['❌', 'DECLINED'],
+  'Availability conflict': ['⚠️', 'ATTENTION'],
+};
+
+/** Pulls "Mon 3 Nov" and "09:00" out of the alert text so they can be shown as clear fields. */
+function fields(body: string): { date?: string; time?: string; rest: string } {
+  const date = body.match(/\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2} [A-Z][a-z]{2}\b/)?.[0];
+  const time = body.match(/\b\d{2}:\d{2}\b/)?.[0];
+  return { date, time, rest: body };
+}
+
+/** Premium layout: brand line, headline, key details as fields, short sentence, footer. */
+function format(title: string, body?: string, audience?: string, name?: string): string {
+  const [icon, label] = KINDS[title] ?? ['🔔', 'NOTICE'];
+  const lines = [`<b>${esc(BRAND.toUpperCase())}</b>  ·  <code>${label}</code>`, LINE, '', `${icon}  <b>${esc(title)}</b>`];
+  if (name) lines.push('', `Hello ${esc(name.split(' ')[0])},`);
+  if (body) {
+    const f = fields(body);
+    lines.push('', esc(body));
+    if (f.date || f.time) {
+      lines.push('');
+      if (f.date) lines.push(`🗓  <b>Date</b>   ${esc(f.date)}`);
+      if (f.time) lines.push(`🕘  <b>Time</b>   ${esc(f.time)}`);
+    }
+  }
+  lines.push('', LINE);
+  lines.push(audience ? `<i>For ${esc(audience)}</i>` : '<i>Open the app for full details.</i>');
+  return lines.join('\n');
+}
+
+export async function sendTelegram(chatId: string, title: string, body?: string, name?: string): Promise<void> {
   if (!telegramEnabled()) return;
-  const text = body ? `<b>${esc(title)}</b>\n${esc(body)}` : esc(title);
+  const text = format(title, body, undefined, name);
   await call('sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true });
 }
 
@@ -49,7 +86,7 @@ export async function sendTelegram(chatId: string, title: string, body?: string)
 const groupQueue: string[] = [];
 let draining = false;
 function postToGroup(text: string) {
-  const chat = groupChatId();
+  const chat = process.env.TELEGRAM_CHAT_ID;
   if (!chat) return;
   if (groupQueue.length < 300) groupQueue.push(text);
   if (draining) return;
@@ -73,13 +110,13 @@ export function pushTelegram(userIds: number[], title: string, body: string): vo
     try {
       const users = await User.findAll({ where: { id: userIds } });
       const names = users.map((u) => u.name);
-      if (groupChatId()) {
+      if (process.env.TELEGRAM_CHAT_ID) {
         const who = names.length > 3 ? `${names.slice(0, 3).join(', ')} +${names.length - 3}` : names.join(', ');
-        postToGroup(`<b>${esc(title)}</b>\n${esc(body)}\n<i>For: ${esc(who)}</i>`);
+        postToGroup(format(title, body, who));
       }
       for (const u of users) {
-        if (!u.telegramChatId || u.telegramChatId === groupChatId()) continue;
-        await sendTelegram(u.telegramChatId, title, body).catch((e) => console.warn(`Telegram send to ${u.username} failed:`, e.message));
+        if (!u.telegramChatId || u.telegramChatId === process.env.TELEGRAM_CHAT_ID) continue;
+        await sendTelegram(u.telegramChatId, title, body, u.name).catch((e) => console.warn(`Telegram send to ${u.username} failed:`, e.message));
       }
     } catch (e: any) {
       console.warn('Telegram push failed:', e?.message);
@@ -96,28 +133,28 @@ async function handle(msg: any) {
   const [cmd, arg] = text.split(/\s+/);
 
   if (cmd.startsWith('/id')) {
-    await sendTelegram(chatId, 'This chat\'s ID', chatId);
+    await sendTelegram(chatId, 'Chat ID', `Use this value as TELEGRAM_CHAT_ID:\n${chatId}`);
     return;
   }
 
   if (cmd.startsWith('/start')) {
     if (!arg) {
-      await sendTelegram(chatId, 'Welcome', `Open the app, go to More > Telegram alerts and tap Connect to link this chat.\n\nThis chat's ID is ${chatId}.`);
+      await sendTelegram(chatId, 'Welcome', `To receive your schedule alerts here, open the app, go to More › Telegram alerts and tap Connect.\n\nChat ID: ${chatId}`);
       return;
     }
     const user = await User.findOne({ where: { telegramLinkCode: arg, active: true } });
     if (!user) {
-      await sendTelegram(chatId, 'This link has expired', 'Open the app, go to More > Telegram and tap Connect again.');
+      await sendTelegram(chatId, 'Link expired', 'Open the app, go to More › Telegram alerts and tap Connect again to get a fresh link.');
       return;
     }
     await User.update({ telegramChatId: null }, { where: { telegramChatId: chatId } }); // one chat, one account
     user.telegramChatId = chatId;
     user.telegramLinkCode = null;
     await user.save();
-    await sendTelegram(chatId, 'Connected', `Hi ${user.name}, your alerts will now arrive here.`);
+    await sendTelegram(chatId, 'Connected', `Hello ${user.name}, you are all set. Your schedule alerts will arrive here.\n\nSend /stop at any time to turn them off.`);
   } else if (cmd.startsWith('/stop')) {
     const n = await User.update({ telegramChatId: null }, { where: { telegramChatId: chatId } });
-    await sendTelegram(chatId, n[0] ? 'Disconnected' : 'Nothing to disconnect', n[0] ? 'You will not get alerts here any more.' : undefined);
+    await sendTelegram(chatId, n[0] ? 'Disconnected' : 'Not connected', n[0] ? 'You will no longer receive alerts in this chat.' : 'This chat is not linked to an account.');
   }
 }
 
@@ -134,13 +171,13 @@ export async function startTelegramPolling(): Promise<void> {
     if (!botName) botName = me.username;
     await call('deleteWebhook'); // polling and webhooks cannot be used together
     console.log(`Telegram bot @${telegramBot()} is on.${process.env.TELEGRAM_CHAT_ID ? ` Every alert is also posted to chat ${process.env.TELEGRAM_CHAT_ID}.` : ' People connect it in the app: More > Telegram alerts.'}`);
-    /* if (groupChatId()) {
-      await sendTelegram(groupChatId(), 'Alerts are connected', 'Every alert from the app will be posted here.').catch((e) =>
+    if (process.env.TELEGRAM_CHAT_ID) {
+      await sendTelegram(process.env.TELEGRAM_CHAT_ID, 'Alerts connected', 'Schedule alerts from the app will be posted in this chat.').catch((e) =>
         console.warn('Could not post to TELEGRAM_CHAT_ID. Is the bot in that chat, and did you press Start?', e.message)
       );
-    } */
+    }
   } catch (e: any) {
-    console.warn('Telegram is not working, check TELEGRAM_BOT_TOKEN:', e?.cause ? `${e.message} (${e.cause.message || e.cause.code || e.cause})` : e.message);
+    console.warn('Telegram is not working, check TELEGRAM_BOT_TOKEN:', e.message);
     running = false;
     return;
   }
