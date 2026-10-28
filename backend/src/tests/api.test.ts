@@ -533,12 +533,18 @@ test('upcoming weeks are open by default from the standard week', async () => {
 });
 
 test('telegram: off by default, link needs a configured bot, alerts still work', async () => {
-  const st = await api('GET', '/api/telegram', tokens.sales01);
-  assert.equal(st.status, 200);
-  assert.equal(st.body.enabled, false);
-  assert.equal(st.body.linked, false);
-  assert.equal((await api('POST', '/api/telegram/link', tokens.sales01)).status, 503);
-  assert.equal((await api('POST', '/api/telegram/test', tokens.sales01)).status, 409);
-  assert.equal((await api('DELETE', '/api/telegram', tokens.sales01)).status, 200);
-  assert.equal((await api('GET', '/api/telegram')).status, 401);
+  const prevToken = process.env.TELEGRAM_BOT_TOKEN;
+  delete process.env.TELEGRAM_BOT_TOKEN;
+  try {
+    const st = await api('GET', '/api/telegram', tokens.sales01);
+    assert.equal(st.status, 200);
+    assert.equal(st.body.enabled, false);
+    assert.equal(st.body.linked, false);
+    assert.equal((await api('POST', '/api/telegram/link', tokens.sales01)).status, 503);
+    assert.equal((await api('POST', '/api/telegram/test', tokens.sales01)).status, 409);
+    assert.equal((await api('DELETE', '/api/telegram', tokens.sales01)).status, 200);
+    assert.equal((await api('GET', '/api/telegram')).status, 401);
+  } finally {
+    if (prevToken !== undefined) process.env.TELEGRAM_BOT_TOKEN = prevToken;
+  }
 });
