@@ -10,7 +10,16 @@ import { User } from '../models';
  * there, with the name of the person it was for. No one needs to connect anything.
  * The server calls Telegram by long polling, so no public URL or HTTPS is needed.
  */
-const token = () => process.env.TELEGRAM_BOT_TOKEN || '';
+const token = () =>
+  (process.env.TELEGRAM_BOT_TOKEN || '')
+    .trim()
+    .replace(/^["']|["']$/g, '')
+    .replace(/^bot/i, '');
+
+const groupChatId = () =>
+  (process.env.TELEGRAM_CHAT_ID || '')
+    .trim()
+    .replace(/^["']|["']$/g, '');
 let botName = process.env.TELEGRAM_BOT_USERNAME || '';
 
 export const telegramEnabled = () => !!token();
@@ -40,7 +49,7 @@ export async function sendTelegram(chatId: string, title: string, body?: string)
 const groupQueue: string[] = [];
 let draining = false;
 function postToGroup(text: string) {
-  const chat = process.env.TELEGRAM_CHAT_ID;
+  const chat = groupChatId();
   if (!chat) return;
   if (groupQueue.length < 300) groupQueue.push(text);
   if (draining) return;
@@ -64,12 +73,12 @@ export function pushTelegram(userIds: number[], title: string, body: string): vo
     try {
       const users = await User.findAll({ where: { id: userIds } });
       const names = users.map((u) => u.name);
-      if (process.env.TELEGRAM_CHAT_ID) {
+      if (groupChatId()) {
         const who = names.length > 3 ? `${names.slice(0, 3).join(', ')} +${names.length - 3}` : names.join(', ');
         postToGroup(`<b>${esc(title)}</b>\n${esc(body)}\n<i>For: ${esc(who)}</i>`);
       }
       for (const u of users) {
-        if (!u.telegramChatId || u.telegramChatId === process.env.TELEGRAM_CHAT_ID) continue;
+        if (!u.telegramChatId || u.telegramChatId === groupChatId()) continue;
         await sendTelegram(u.telegramChatId, title, body).catch((e) => console.warn(`Telegram send to ${u.username} failed:`, e.message));
       }
     } catch (e: any) {
@@ -125,13 +134,13 @@ export async function startTelegramPolling(): Promise<void> {
     if (!botName) botName = me.username;
     await call('deleteWebhook'); // polling and webhooks cannot be used together
     console.log(`Telegram bot @${telegramBot()} is on.${process.env.TELEGRAM_CHAT_ID ? ` Every alert is also posted to chat ${process.env.TELEGRAM_CHAT_ID}.` : ' People connect it in the app: More > Telegram alerts.'}`);
-    if (process.env.TELEGRAM_CHAT_ID) {
-      await sendTelegram(process.env.TELEGRAM_CHAT_ID, 'Alerts are connected', 'Every alert from the app will be posted here.').catch((e) =>
+    /* if (groupChatId()) {
+      await sendTelegram(groupChatId(), 'Alerts are connected', 'Every alert from the app will be posted here.').catch((e) =>
         console.warn('Could not post to TELEGRAM_CHAT_ID. Is the bot in that chat, and did you press Start?', e.message)
       );
-    }
+    } */
   } catch (e: any) {
-    console.warn('Telegram is not working, check TELEGRAM_BOT_TOKEN:', e.message);
+    console.warn('Telegram is not working, check TELEGRAM_BOT_TOKEN:', e?.cause ? `${e.message} (${e.cause.message || e.cause.code || e.cause})` : e.message);
     running = false;
     return;
   }
