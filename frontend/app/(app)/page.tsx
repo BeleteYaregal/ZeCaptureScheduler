@@ -1,29 +1,46 @@
 'use client';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/components/Auth';
 import DaySheet from '@/components/DaySheet';
 import { IconChevronL, IconChevronR, IconEmpty } from '@/components/Icons';
-import { Empty, ErrorBox, Loading, Notice } from '@/components/ui';
-import { useFetch } from '@/lib/api';
-import { addDays, dayNumber, longDay, mondayOf, relativeDay, todayStr, weekdayShort, weekRange } from '@/lib/dates';
-import type { WeekView } from '@/lib/types';
+import { Empty, ErrorBox, Loading, Notice, Sheet, Switch, useToast } from '@/components/ui';
+import { api, useFetch } from '@/lib/api';
+import { addDays, dayNumber, longDay, mondayOf, monthShort, relativeDay, todayStr, weekdayShort, weekRange } from '@/lib/dates';
+import type { User, WeekView } from '@/lib/types';
+
+type Kind = 'sales' | 'company' | 'off';
+const DAY3 = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export default function SchedulePage() {
   const { user } = useAuth();
+  const toast = useToast();
   const today = todayStr();
-  const [weekStart, setWeekStart] = useState(mondayOf(today));
+  const currentMonday = mondayOf(today);
+  const [weekStart, setWeekStart] = useState(currentMonday);
   const [picked, setPicked] = useState<string | null>(null);
-  const { data, error, loading, reload } = useFetch<WeekView>(`/api/weeks/${weekStart}`);
-  const next = useFetch<{ booking: { id: number; date: string; startTime: string } | null }>(user?.role === 'sales' ? '/api/me/next' : null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [showDayEditor, setShowDayEditor] = useState(false);
 
+  const { data, error, loading, reload } = useFetch<WeekView>(`/api/weeks/${weekStart}`);
+  const next = useFetch<{ booking: { id: number; date: string; startTime: string } | null }>(
+    user?.role === 'sales' ? '/api/me/next' : null
+  );
+  const vids = useFetch<{ users: User[] }>(
+    user?.role === 'admin' ? '/api/users?role=videographer&active=true' : null
+  );
   const reqs = useFetch<{ items: unknown[] }>(user?.role === 'admin' ? '/api/requests' : null);
+
   if (!user) return null;
   const isAdmin = user.role === 'admin';
   const days = data?.days ?? [];
-  const sel = days.find((d) => d.date === picked) ?? days.find((d) => d.date === today) ?? days.find((d) => d.date >= today) ?? days[0] ?? null;
-  const published = data?.week.status === 'published';
-  const currentMonday = mondayOf(today);
+  const sel =
+    days.find((d) => d.date === picked) ??
+    days.find((d) => d.date === today) ??
+    days.find((d) => d.date >= today) ??
+    days[0] ??
+    null;
 
   const go = (n: number) => {
     setWeekStart(addDays(weekStart, 7 * n));
@@ -34,17 +51,78 @@ export default function SchedulePage() {
     next.reload();
   };
 
+  // Build day type map from loaded days
+  const kindMap: Record<string, Kind> = {};
+  for (let i = 0; i < 6; i++) {
+    const date = addDays(weekStart, i);
+    const d = days.find((x) => x.date === date);
+    kindMap[date] = d ? (d.type as Kind) : 'off';
+  }
+
+  // Admin quick-plan: save days + auto-generate schedule in one step
+  async function saveDays(picks: Record<string, Kind>, videographerId: number | null) {
+    setBusy(true);
+    setErr(null);
+    try {
+      // 1. Save the day plan
+      await api(`/api/weeks/${weekStart}/plan`, {
+        method: 'PUT',
+        body: {
+          videographerId,
+          override: true,
+          days: Object.entries(picks)
+            .filter(([, k]) => k !== 'off')
+            .map(([date, type]) => ({ date, type })),
+        },
+      });
+      // 2. Auto-generate schedule (assigns sales people)
+      const hasSales = Object.values(picks).some((k) => k === 'sales');
+      if (hasSales) {
+        await api(`/api/weeks/${weekStart}/generate`, { method: 'POST' });
+      }
+      // 3. Publish so everyone can see
+      try {
+        await api(`/api/weeks/${weekStart}/publish`, { method: 'POST' });
+      } catch {
+        // already published or no videographer — that's ok, schedule is still set
+      }
+      toast('Schedule updated');
+      setShowDayEditor(false);
+      await reload();
+    } catch (e: any) {
+      setErr(e.message || 'Something went wrong');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const pending = reqs.data?.items.length ?? 0;
+  const published = data?.week.status === 'published';
+  const videographers = vids.data?.users ?? [];
+
   return (
     <div className="page">
       <div className="page-head">
         <div>
-          <h1 className="title">{user.role === 'sales' ? `Hi, ${user.name.split(' ')[0]}` : 'Schedule'}</h1>
+          <h1 className="title">
+            {user.role === 'sales' ? `Hi, ${user.name.split(' ')[0]}` : 'Schedule'}
+          </h1>
           <p className="subtitle">
-            {user.role === 'videographer' ? 'Your capture days, by team' : user.role === 'sales' ? 'When the camera is on you' : 'Who is captured, and when'}
+            {user.role === 'videographer'
+              ? 'Your capture days, by team'
+              : user.role === 'sales'
+              ? 'When the camera is on you'
+              : 'Who is captured, and when'}
           </p>
         </div>
+        {isAdmin && (
+          <button className="btn btn-primary btn-sm" onClick={() => setShowDayEditor(true)}>
+            Edit days
+          </button>
+        )}
       </div>
 
+      {/* Sales: next capture hero card */}
       {user.role === 'sales' && next.data && (
         next.data.booking ? (
           <div className="next">
@@ -54,11 +132,16 @@ export default function SchedulePage() {
           </div>
         ) : (
           <div className="sheet" style={{ marginBottom: 18 }}>
-            <Empty icon={<IconEmpty />} title="No upcoming capture" text="When the admin publishes a schedule that includes you, your date and time show up here." />
+            <Empty
+              icon={<IconEmpty />}
+              title="No upcoming capture"
+              text="When the admin publishes a schedule that includes you, your date and time show up here."
+            />
           </div>
         )
       )}
 
+      {/* Week navigator */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
         <div className="weeknav">
           <button className="iconbtn" onClick={() => go(-1)} aria-label="Previous week">
@@ -82,6 +165,7 @@ export default function SchedulePage() {
         )}
       </div>
 
+      {/* Day chips */}
       <div className="strip" role="group" aria-label="Days of the week">
         {Array.from({ length: 6 }).map((_, i) => {
           const date = addDays(weekStart, i);
@@ -115,10 +199,12 @@ export default function SchedulePage() {
         </span>
       </div>
 
+      {/* Errors / notices */}
+      {err && <Notice kind="error">{err}</Notice>}
       {error && <ErrorBox message={error} onRetry={reload} />}
       {loading && !data && <Loading rows={2} />}
 
-      {isAdmin && (reqs.data?.items.length ?? 0) > 0 && (
+      {isAdmin && pending > 0 && (
         <Notice
           kind="info"
           action={
@@ -127,22 +213,11 @@ export default function SchedulePage() {
             </Link>
           }
         >
-          {reqs.data!.items.length} supervisor {reqs.data!.items.length === 1 ? 'request is' : 'requests are'} waiting for approval.
+          {pending} supervisor {pending === 1 ? 'request is' : 'requests are'} waiting for approval.
         </Notice>
       )}
-      {data && isAdmin && data.week.status === 'draft' && (
-        <Notice
-          kind="info"
-          action={
-            <Link className="btn btn-sm btn-soft" href="/plan">
-              Review and publish
-            </Link>
-          }
-        >
-          This week is a draft. The team cannot see it yet.
-        </Notice>
-      )}
-      {data && isAdmin && data.warnings.length > 0 && (
+
+      {data && data.warnings.length > 0 && (
         <Notice>
           <ul style={{ paddingLeft: 18, margin: 0 }}>
             {data.warnings.map((w, i) => (
@@ -152,29 +227,35 @@ export default function SchedulePage() {
         </Notice>
       )}
 
+      {/* Empty states */}
       {data && days.length === 0 && (
         <div className="sheet">
-          {isAdmin && data.week.status === 'none' ? (
+          {isAdmin ? (
             <Empty
               icon={<IconEmpty />}
               title="No capture days yet"
-              text="Pick the days for this week and the app will spread the team across them."
+              text="Tap 'Edit days' to set which days this week are Sales or Company — the team is assigned automatically."
               action={
-                <Link className="btn btn-primary" href="/plan">
-                  Plan this week
-                </Link>
+                <button className="btn btn-primary" onClick={() => setShowDayEditor(true)}>
+                  Set up this week
+                </button>
               }
             />
           ) : (
             <Empty
               icon={<IconEmpty />}
-              title={user.role === 'videographer' ? 'No days assigned to you' : 'Nothing published for this week'}
-              text={user.role === 'videographer' ? 'When the admin publishes a week with you on it, your days appear here.' : 'Check back after the admin publishes the schedule.'}
+              title={user.role === 'videographer' ? 'No days assigned to you' : 'Nothing scheduled yet'}
+              text={
+                user.role === 'videographer'
+                  ? 'When the admin sets up a week with you, your days appear here.'
+                  : 'The admin has not set up this week yet. Check back soon.'
+              }
             />
           )}
         </div>
       )}
 
+      {/* Day detail */}
       {data && sel && (
         <DaySheet
           key={sel.id}
@@ -188,11 +269,161 @@ export default function SchedulePage() {
         />
       )}
 
+      {/* Admin footer stats */}
       {data && days.length > 0 && isAdmin && (
         <p className="small faint" style={{ marginTop: 14, textAlign: 'center' }}>
           {data.stats.booked} booked · {data.stats.done} done · {data.stats.missed} missed
+          {!published && (
+            <span style={{ marginLeft: 8, color: 'var(--amber)' }}>· draft</span>
+          )}
         </p>
       )}
+
+      {/* Day editor sheet (admin only) */}
+      {showDayEditor && data && (
+        <DayEditorSheet
+          weekStart={weekStart}
+          kindMap={kindMap}
+          videographers={videographers}
+          defaultVideoId={data.week.videographerId ?? videographers[0]?.id ?? null}
+          limits={data.limits}
+          busy={busy}
+          onClose={() => { setShowDayEditor(false); setErr(null); }}
+          onSave={saveDays}
+        />
+      )}
     </div>
+  );
+}
+
+/* ----------------------------------------------------------------
+   Day editor sheet (admin): just pick Sales / Company / Off per day,
+   choose a videographer, and save. The system assigns people automatically.
+---------------------------------------------------------------- */
+
+function DayEditorSheet({
+  weekStart,
+  kindMap,
+  videographers,
+  defaultVideoId,
+  limits,
+  busy,
+  onClose,
+  onSave,
+}: {
+  weekStart: string;
+  kindMap: Record<string, Kind>;
+  videographers: User[];
+  defaultVideoId: number | null;
+  limits: { salesDays: number; companyDays: number };
+  busy: boolean;
+  onClose: () => void;
+  onSave: (picks: Record<string, Kind>, videographerId: number | null) => void;
+}) {
+  const [picks, setPicks] = useState<Record<string, Kind>>(kindMap);
+  const [vid, setVid] = useState<number | null>(defaultVideoId);
+
+  // sync if parent kindMap changes
+  useEffect(() => {
+    setPicks(kindMap);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekStart]);
+
+  const sales = Object.values(picks).filter((k) => k === 'sales').length;
+  const company = Object.values(picks).filter((k) => k === 'company').length;
+  const any = sales + company > 0;
+  const over = sales > limits.salesDays || company > limits.companyDays;
+
+  function cycle(date: string) {
+    setPicks((p) => {
+      const cur = p[date] ?? 'off';
+      const next: Kind = cur === 'off' ? 'sales' : cur === 'sales' ? 'company' : 'off';
+      return { ...p, [date]: next };
+    });
+  }
+
+  return (
+    <Sheet
+      title="Set up this week"
+      subtitle="Tap a day to change it. The team is assigned automatically."
+      onClose={onClose}
+    >
+      <div className="list">
+        {DAY3.map((_, i) => {
+          const date = addDays(weekStart, i);
+          const k = picks[date] ?? 'off';
+          return (
+            <div key={date} className="planrow">
+              <div className="d">
+                {weekdayShort(date)}
+                <small className="num">
+                  {dayNumber(date)} {monthShort(date)}
+                </small>
+              </div>
+              <div className="seg">
+                {(['off', 'sales', 'company'] as const).map((x) => (
+                  <button
+                    key={x}
+                    data-kind={x === 'off' ? undefined : x}
+                    aria-pressed={k === x}
+                    onClick={() => setPicks((p) => ({ ...p, [date]: x }))}
+                  >
+                    {x === 'off' ? 'Off' : x === 'sales' ? 'Sales' : 'Company'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {videographers.length > 0 && (
+        <label className="field" style={{ marginTop: 14 }}>
+          <span className="label">Videographer (for this week)</span>
+          <select
+            className="select"
+            value={vid ?? ''}
+            onChange={(e) => setVid(e.target.value ? Number(e.target.value) : null)}
+          >
+            <option value="">Choose a videographer</option>
+            {videographers.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      {over && (
+        <div style={{ marginTop: 10 }}>
+          <Notice>
+            You have {sales} sales and {company} company days. The usual limit is{' '}
+            {limits.salesDays} / {limits.companyDays}. You can still save — the system will use it.
+          </Notice>
+        </div>
+      )}
+
+      <p className="hint" style={{ marginTop: 10 }}>
+        Saving assigns all salespeople automatically. You can still move or swap individuals from the schedule view.
+      </p>
+
+      <button
+        className="btn btn-primary btn-block"
+        style={{ marginTop: 12 }}
+        disabled={!any || busy}
+        onClick={() => onSave(picks, vid)}
+      >
+        {busy ? 'Saving…' : 'Save & assign team'}
+      </button>
+      <button
+        className="btn btn-ghost btn-block"
+        style={{ marginTop: 8 }}
+        disabled={busy}
+        onClick={onClose}
+      >
+        Cancel
+      </button>
+    </Sheet>
   );
 }

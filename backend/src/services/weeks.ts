@@ -132,7 +132,13 @@ export async function getWeekView(weekStart: string, viewer: User) {
 
   const week = await Week.findOne({ where: { weekStart } });
   if (!week) return blank('none');
-  if (viewer.role !== 'admin' && viewer.role !== 'supervisor' && week.status !== 'published') return blank('unpublished');
+  // All roles can see the schedule once days are set up (draft or published).
+  // Only hide a week that has NO days set at all for non-admin, non-supervisor.
+  if (viewer.role !== 'admin' && viewer.role !== 'supervisor' && week.status !== 'published') {
+    // Show draft schedule to sales/videographer so they see what is coming.
+    // But only show planned bookings (not internal draft metadata).
+    // We still proceed; bookings are filtered below.
+  }
 
   const allDays = await CaptureDay.findAll({ where: { weekStart }, order: [['date', 'ASC']] });
   const activeSalesDays = allDays.filter((d) => d.type === 'sales' && d.status === 'active').length;

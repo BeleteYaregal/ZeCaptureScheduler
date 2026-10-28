@@ -7,7 +7,7 @@ import { ThemeToggle } from '@/lib/theme';
 import type { Role } from '@/lib/types';
 import AlertHost from './AlertHost';
 import { useAuth } from './Auth';
-import { IconBell, IconCalendar, IconChart, IconFilm, IconLock, IconMore, IconPlan, IconSend, IconTeam } from './Icons';
+import { IconBell, IconCalendar, IconChart, IconFilm, IconLock, IconMore, IconSend, IconTeam } from './Icons';
 
 interface Tab {
   href: string;
@@ -21,7 +21,6 @@ const ALL: Role[] = ['admin', 'sales', 'videographer', 'supervisor'];
 
 const TABS: Tab[] = [
   { href: '/', label: 'Schedule', icon: IconCalendar, roles: ALL, match: (p) => p === '/' },
-  { href: '/plan', label: 'Planner', icon: IconPlan, roles: ['admin'] },
   { href: '/team', label: 'Team', icon: IconTeam, roles: ['admin', 'videographer'] },
   { href: '/book', label: 'Book', icon: IconSend, roles: ['supervisor'] },
   { href: '/my-team', label: 'My team', icon: IconTeam, roles: ['supervisor'] },
