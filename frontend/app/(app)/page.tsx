@@ -463,9 +463,7 @@ function DayEditorSheet({
       )}
 
       <p className="hint" style={{ marginTop: 10 }}>
-        After saving, tap a <strong>Sales day</strong> chip then tap{' '}
-        <strong>&ldquo;Add person&rdquo;</strong> to assign individuals one by one.
-        Supervisors can also request their team members.
+        These days will become the default for all future weeks and months automatically. Whenever you edit days, the new pattern is saved. After saving, tap any Sales day to add people.
       </p>
 
       <button
@@ -474,7 +472,7 @@ function DayEditorSheet({
         disabled={!any || busy}
         onClick={() => onSave(picks, vid)}
       >
-        {busy ? 'Saving…' : 'Save days'}
+        {busy ? 'Saving…' : 'Save days & set as default'}
       </button>
       <button
         className="btn btn-ghost btn-block"

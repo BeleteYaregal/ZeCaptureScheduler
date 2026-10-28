@@ -5,7 +5,7 @@ import { addDays, addMinutes, isValidDate, mondayOf, prettyDay, todayIn } from '
 import { HttpError } from '../http';
 import { Booking, CaptureDay, Unavailability, User, Week } from '../models';
 import { autoCap, buildSchedule } from '../scheduler';
-import { DEFAULT_SETTINGS, getSettings, Settings } from '../settings';
+import { DEFAULT_SETTINGS, getSettings, Settings, updateSettings } from '../settings';
 import { audit, notify } from './log';
 import { loadActiveSales, loadOrgMaps, visibleSalesIds } from './org';
 
@@ -112,7 +112,7 @@ async function ensureOpenWeek(weekStart: string): Promise<void> {
 
 export async function getWeekView(weekStart: string, viewer: User) {
   assertMonday(weekStart);
-  if (viewer.role === 'admin' || viewer.role === 'supervisor') await ensureOpenWeek(weekStart);
+  await ensureOpenWeek(weekStart);
   const settings = await getSettings();
   const weekEnd = addDays(weekStart, 6);
   const limits = {
@@ -362,6 +362,28 @@ export async function savePlan(actor: User, weekStart: string, body: unknown) {
   }
   const salesDays = await CaptureDay.findAll({ where: { weekStart, type: 'sales' } });
   for (const d of salesDays) await recomputeSlots(d.id, settings);
+
+  // Automatically update the default week pattern for all future weeks & months!
+  // Whatever days the admin sets become the persistent default for any uncreated weeks.
+  try {
+    const patternMap = new Map(plan.days.map((d) => [d.date, d.type]));
+    const newPattern: ('sales' | 'company' | 'off')[] = [];
+    for (let i = 0; i < 6; i++) {
+      const dt = addDays(weekStart, i);
+      newPattern.push(patternMap.get(dt) ?? 'off');
+    }
+    const updatePayload: Record<string, unknown> = {
+      week_pattern: newPattern,
+      sales_days_per_week: Math.max(settings.sales_days_per_week, salesN),
+      company_days_per_week: Math.max(settings.company_days_per_week, companyN),
+    };
+    if (plan.videographerId !== undefined) {
+      updatePayload.default_videographer_id = plan.videographerId;
+    }
+    await updateSettings(updatePayload);
+  } catch {
+    /* best effort save to settings */
+  }
 
   await audit(actor.id, 'plan.save', 'week', weekStart, {
     sales: salesN,
