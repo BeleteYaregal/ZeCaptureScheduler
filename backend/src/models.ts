@@ -241,14 +241,22 @@ CaptureDay.hasMany(Booking, { foreignKey: 'captureDayId', as: 'bookings' });
 export async function initDb(): Promise<void> {
   await sequelize.authenticate();
   await sequelize.sync();
-  // Existing databases: add the video-editing columns if they are missing.
+  // Existing databases: add columns safely (handles PostgreSQL lowercase keys)
   const qi = sequelize.getQueryInterface();
-  await sequelize.query("UPDATE weeks SET status = 'published' WHERE status = 'draft'"); // every week is live now
-  const userCols = await qi.describeTable('users');
-  if (!userCols.telegramChatId) await qi.addColumn('users', 'telegramChatId', { type: DataTypes.STRING(30), allowNull: true });
-  if (!userCols.telegramLinkCode) await qi.addColumn('users', 'telegramLinkCode', { type: DataTypes.STRING(40), allowNull: true });
-  const cols = await qi.describeTable('bookings');
-  if (!cols.editDone) await qi.addColumn('bookings', 'editDone', { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false });
-  if (!cols.requestedById) await qi.addColumn('bookings', 'requestedById', { type: DataTypes.INTEGER, allowNull: true });
-  if (!cols.editedAt) await qi.addColumn('bookings', 'editedAt', { type: DataTypes.DATE, allowNull: true });
+  try {
+    await sequelize.query("UPDATE weeks SET status = 'published' WHERE status = 'draft'");
+  } catch {}
+  try {
+    const userCols = await qi.describeTable('users');
+    const hasCol = (cols: any, name: string) => {
+      const lower = name.toLowerCase();
+      return Object.keys(cols).some((k) => k.toLowerCase() === lower);
+    };
+    if (!hasCol(userCols, 'telegramChatId')) await qi.addColumn('users', 'telegramChatId', { type: DataTypes.STRING(30), allowNull: true }).catch(() => {});
+    if (!hasCol(userCols, 'telegramLinkCode')) await qi.addColumn('users', 'telegramLinkCode', { type: DataTypes.STRING(40), allowNull: true }).catch(() => {});
+    const cols = await qi.describeTable('bookings');
+    if (!hasCol(cols, 'editDone')) await qi.addColumn('bookings', 'editDone', { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false }).catch(() => {});
+    if (!hasCol(cols, 'requestedById')) await qi.addColumn('bookings', 'requestedById', { type: DataTypes.INTEGER, allowNull: true }).catch(() => {});
+    if (!hasCol(cols, 'editedAt')) await qi.addColumn('bookings', 'editedAt', { type: DataTypes.DATE, allowNull: true }).catch(() => {});
+  } catch {}
 }
