@@ -477,17 +477,13 @@ export async function publishWeek(actor: User, weekStart: string) {
   if (week.status === 'published') throw new HttpError(409, 'Already published', 'PUBLISHED');
   const days = await CaptureDay.findAll({ where: { weekStart, status: 'active' }, order: [['date', 'ASC']] });
   if (!days.length) throw new HttpError(422, 'Pick at least one capture day first', 'NO_PLAN');
-  if (days.some((d) => !d.videographerId)) {
-    throw new HttpError(422, 'Assign a videographer before publishing, so they can see their run sheet', 'NO_VIDEOGRAPHER');
-  }
+
+  // Admin manually assigns people — no auto-generate required before publishing.
+  // Videographer is optional at publish time; admin can assign later.
 
   const bookings = days.length
     ? await Booking.findAll({ where: { captureDayId: { [Op.in]: days.map((d) => d.id) }, status: 'planned' } })
     : [];
-  const hasSalesDays = days.some((d) => d.type === 'sales');
-  if (hasSalesDays && bookings.length === 0 && (await User.count({ where: { role: 'sales', active: true } })) > 0) {
-    throw new HttpError(422, 'Generate the schedule before publishing', 'NOT_GENERATED');
-  }
 
   week.status = 'published';
   week.publishedAt = new Date();
