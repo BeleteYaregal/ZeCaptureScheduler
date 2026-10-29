@@ -9,6 +9,21 @@ const toDate = (s: string) => new Date(s + 'T00:00:00Z');
 export function todayStr(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 }
+export function nowTimeStr(): string {
+  return new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date());
+}
+export function addMinutes(hhmm: string, minutes: number): string {
+  const [h, m] = (hhmm || '09:00').split(':').map(Number);
+  const total = (h || 0) * 60 + (m || 0) + minutes;
+  const hh = Math.floor(total / 60) % 24;
+  const mm = total % 60;
+  return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+}
+export function isTimePassed(date: string, time: string, today = todayStr(), nowTime = nowTimeStr()): boolean {
+  if (date < today) return true;
+  if (date > today) return false;
+  return time <= nowTime;
+}
 export const addDays = (s: string, n: number) => new Date(toDate(s).getTime() + n * DAY_MS).toISOString().slice(0, 10);
 export const weekdayIndex = (s: string) => (toDate(s).getUTCDay() + 6) % 7;
 export const mondayOf = (s: string) => addDays(s, -weekdayIndex(s));

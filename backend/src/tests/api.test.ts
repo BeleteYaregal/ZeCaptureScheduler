@@ -503,6 +503,44 @@ test('supervisor: own team, per-day limit, requests, approval, generate keeps re
   assert.ok(notes.body.items.some((n: any) => n.title === 'Request declined'));
 });
 
+test('supervisor cannot request past times; admin cannot approve without override', async () => {
+  const { CaptureDay, Booking, User } = await import('../models');
+  const { todayIn, mondayOf } = await import('../dates');
+  const { config } = await import('../config');
+  const members = await api('GET', '/api/team/members', tokens.sup1);
+  const mine: number[] = members.body.members.filter((m: any) => m.active).map((m: any) => m.id);
+
+  // 1. Past date
+  const pastDay = await CaptureDay.create({ weekStart: '2020-01-06', date: '2020-01-08', type: 'sales', startTime: '09:00', status: 'active' });
+  const pastReq = await api('POST', '/api/team/requests', tokens.sup1, { salesIds: [mine[0]], captureDayId: pastDay.id });
+  assert.equal(pastReq.status, 422);
+  assert.equal(pastReq.body.error, 'That day has passed');
+
+  // 2. Today with a past slot time (00:00)
+  const today = todayIn(config.timezone);
+  let todayDay = await CaptureDay.findOne({ where: { date: today } });
+  if (!todayDay) {
+    todayDay = await CaptureDay.create({ weekStart: mondayOf(today), date: today, type: 'sales', startTime: '00:00', status: 'active' });
+  } else {
+    todayDay.startTime = '00:00';
+    await todayDay.save();
+  }
+  const todayReq = await api('POST', '/api/team/requests', tokens.sup1, { salesIds: [mine[0]], captureDayId: todayDay.id });
+  assert.equal(todayReq.status, 422);
+  assert.equal(todayReq.body.code, 'TIME_PASSED');
+
+  // 3. Admin cannot approve an already passed request without override
+  const supUser = await User.findOne({ where: { username: 'sup1' } });
+  const passedBooking = await Booking.create({ captureDayId: pastDay.id, salesId: mine[0], slotOrder: 0, startTime: '09:00', status: 'requested', requestedById: supUser!.id });
+  const approveFail = await api('POST', `/api/requests/${passedBooking.id}/approve`, tokens.admin, {});
+  assert.equal(approveFail.status, 422);
+  assert.equal(approveFail.body.code, 'TIME_PASSED');
+
+  // 4. Admin with override can approve
+  const approveOverride = await api('POST', `/api/requests/${passedBooking.id}/approve`, tokens.admin, { override: true });
+  assert.equal(approveOverride.status, 200);
+});
+
 test('standard week: apply to several weeks, build and publish, skip what is planned', async () => {
   const bad = await api('PUT', '/api/settings', tokens.admin, { week_pattern: ['sales', 'sales', 'sales', 'sales', 'sales', 'sales'] });
   assert.equal(bad.status, 400, 'pattern is checked against the day limits');

@@ -31,6 +31,22 @@ export function todayIn(timezone: string): string {
   }).format(new Date());
 }
 
+export function nowTimeIn(timezone: string): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date());
+}
+
+export function isTimePassed(date: string, time: string, timezone: string): boolean {
+  const today = todayIn(timezone);
+  if (date < today) return true;
+  if (date > today) return false;
+  return time <= nowTimeIn(timezone);
+}
+
 export function addMinutes(hhmm: string, minutes: number): string {
   const [h, m] = hhmm.split(':').map(Number);
   const total = h * 60 + m + minutes;

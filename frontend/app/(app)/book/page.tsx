@@ -4,7 +4,7 @@ import { useAuth } from '@/components/Auth';
 import { IconChevronL, IconChevronR, IconEmpty } from '@/components/Icons';
 import { Empty, ErrorBox, Loading, Notice, Sheet, useToast } from '@/components/ui';
 import { api, useFetch } from '@/lib/api';
-import { addDays, longDay, mondayOf, todayStr, weekdayIndex, weekRange } from '@/lib/dates';
+import { addDays, addMinutes, isTimePassed, longDay, mondayOf, nowTimeStr, todayStr, weekdayIndex, weekRange } from '@/lib/dates';
 import type { DayView, WeekView } from '@/lib/types';
 
 interface Member {
@@ -73,6 +73,8 @@ export default function BookPage() {
         const mine = d.bookings.filter((b) => b.status !== 'rescheduled');
         const dayFull = d.capacity !== null && (d.load ?? 0) >= d.capacity;
         const limitHit = mine.length >= limit;
+        const nextSlotTime = addMinutes(d.startTime || '09:00', (d.load ?? 0) * 30);
+        const timePassed = isTimePassed(d.date, nextSlotTime, today, nowTimeStr());
         return (
           <div key={d.id} className="list" style={{ marginBottom: 14 }}>
             <div className="group-head">
@@ -80,10 +82,11 @@ export default function BookPage() {
                 <div className="name">{longDay(d.date)}</div>
                 <div className="small muted">
                   Your team {mine.length}/{limit} · Day {d.load ?? 0}/{d.capacity ?? '–'}
+                  {timePassed && ' · Time passed'}
                 </div>
               </div>
-              <button className="btn btn-primary btn-sm" disabled={dayFull || limitHit} onClick={() => setPick(d)}>
-                {limitHit ? 'Your limit' : dayFull ? 'Day full' : 'Request'}
+              <button className="btn btn-primary btn-sm" disabled={timePassed || dayFull || limitHit} onClick={() => setPick(d)}>
+                {timePassed ? 'Time passed' : limitHit ? 'Your limit' : dayFull ? 'Day full' : 'Request'}
               </button>
             </div>
             {mine.length === 0 && <p className="pad muted small">Nobody from your team yet.</p>}
@@ -126,9 +129,15 @@ function RequestSheet({ day, members, busy, room, onClose, onDone }: { day: DayV
   const [sel, setSel] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
   const [errs, setErrs] = useState<string[]>([]);
+  const nextSlotTime = addMinutes(day.startTime || '09:00', (day.load ?? 0) * 30);
+  const isPassed = isTimePassed(day.date, nextSlotTime);
   const toggle = (id: number) => setSel((s) => (s.includes(id) ? s.filter((x) => x !== id) : s.length < room ? [...s, id] : s));
 
   async function send() {
+    if (isPassed) {
+      setErrs([`The available slot time on ${longDay(day.date)} (${nextSlotTime}) has already passed.`]);
+      return;
+    }
     setSaving(true);
     setErrs([]);
     try {
@@ -146,6 +155,11 @@ function RequestSheet({ day, members, busy, room, onClose, onDone }: { day: DayV
 
   return (
     <Sheet title={`Request ${longDay(day.date)}`} subtitle={`You can add ${room} more ${room === 1 ? 'person' : 'people'} on this day.`} onClose={errs.length ? onDone : onClose}>
+      {isPassed && (
+        <Notice kind="error">
+          The capture time for this day ({nextSlotTime}) has already passed. Please close and select an upcoming day.
+        </Notice>
+      )}
       {errs.map((e, i) => (
         <Notice key={i} kind="error">
           {e}
@@ -157,7 +171,7 @@ function RequestSheet({ day, members, busy, room, onClose, onDone }: { day: DayV
           const taken = busy.has(m.id);
           return (
             <label key={m.id} className="row" style={{ opacity: taken ? 0.5 : 1 }}>
-              <input type="checkbox" checked={sel.includes(m.id)} disabled={taken || (!sel.includes(m.id) && sel.length >= room)} onChange={() => toggle(m.id)} />
+              <input type="checkbox" checked={sel.includes(m.id)} disabled={isPassed || taken || (!sel.includes(m.id) && sel.length >= room)} onChange={() => toggle(m.id)} />
               <div className="grow name">{m.name}</div>
               {taken && <span className="small muted">Already booked this week</span>}
             </label>
@@ -165,8 +179,8 @@ function RequestSheet({ day, members, busy, room, onClose, onDone }: { day: DayV
         })}
       </div>
       <div style={{ height: 12 }} />
-      <button className="btn btn-primary btn-block" disabled={saving || sel.length === 0} onClick={send}>
-        Send {sel.length || ''} {sel.length === 1 ? 'request' : 'requests'}
+      <button className="btn btn-primary btn-block" disabled={isPassed || saving || sel.length === 0} onClick={send}>
+        {isPassed ? 'Time has passed' : `Send ${sel.length || ''} ${sel.length === 1 ? 'request' : 'requests'}`}
       </button>
     </Sheet>
   );

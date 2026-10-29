@@ -11,9 +11,11 @@ import { longDay } from '@/lib/dates';
 interface Req {
   id: number;
   date: string;
+  startTime?: string;
   name: string;
   supervisorName: string | null;
   requestedBy: string | null;
+  passed?: boolean;
 }
 
 export default function RequestsPage() {
@@ -95,8 +97,13 @@ export default function RequestsPage() {
             .map((r) => (
               <div key={r.id} className="row">
                 <div className="grow">
-                  <div className="name">{r.name}</div>
-                  <div className="small muted">{r.supervisorName ?? 'No supervisor'}</div>
+                  <div className="name" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {r.name}
+                    {r.passed && <span className="pill pill-missed">Time passed</span>}
+                  </div>
+                  <div className="small muted">
+                    {r.supervisorName ?? 'No supervisor'}{r.startTime ? ` · Slot at ${r.startTime}` : ''}
+                  </div>
                 </div>
                 <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => act(r, 'decline')}>
                   Decline

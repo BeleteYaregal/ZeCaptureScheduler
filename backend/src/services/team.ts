@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import { Op } from 'sequelize';
 import { z } from 'zod';
 import { config } from '../config';
-import { prettyDay, todayIn } from '../dates';
+import { addMinutes, isTimePassed, prettyDay, todayIn } from '../dates';
 import { HttpError } from '../http';
 import { Booking, CaptureDay, Supervisor, User } from '../models';
 import { getSettings } from '../settings';
@@ -86,11 +86,29 @@ export async function createRequests(actor: User, body: unknown) {
   const settings = await getSettings();
   const day = await CaptureDay.findByPk(captureDayId);
   if (!day) throw new HttpError(404, 'Day not found');
-  if (day.date < todayIn(config.timezone)) throw new HttpError(422, 'That day has passed', 'BAD_DAY');
+  const today = todayIn(config.timezone);
+  if (day.date < today) throw new HttpError(422, 'That day has passed', 'BAD_DAY');
+
+  const existingBookings = await Booking.count({
+    where: { captureDayId: day.id, status: { [Op.ne]: 'rescheduled' } },
+  });
+
+  if (day.date === today) {
+    const nextSlot = addMinutes(day.startTime, existingBookings * settings.slot_minutes);
+    if (isTimePassed(day.date, nextSlot, config.timezone)) {
+      throw new HttpError(
+        422,
+        `The available capture time for today (${nextSlot}) has already passed. Please select an upcoming day.`,
+        'TIME_PASSED'
+      );
+    }
+  }
+
   const team = new Set(await teamIds(actor));
 
   const created: { salesId: number; bookingId: number }[] = [];
   const failed: { salesId: number; name: string; error: string }[] = [];
+  let offset = 0;
   for (const salesId of [...new Set(salesIds)]) {
     const person = await User.findByPk(salesId);
     const name = person?.name ?? 'Unknown';
@@ -103,11 +121,16 @@ export async function createRequests(actor: User, body: unknown) {
       if (mine >= settings.supervisor_max_per_day) {
         throw new HttpError(409, `Your daily limit is ${settings.supervisor_max_per_day} people (${prettyDay(day.date)}).`, 'SUP_LIMIT');
       }
+      const slotTime = addMinutes(day.startTime, (existingBookings + offset) * settings.slot_minutes);
+      if (isTimePassed(day.date, slotTime, config.timezone)) {
+        throw new HttpError(422, `The slot at ${slotTime} has already passed.`, 'TIME_PASSED');
+      }
       await checkPlacement(salesId, day, settings, {});
       const b = await Booking.create({
-        captureDayId: day.id, salesId, slotOrder: 9999, startTime: day.startTime, status: 'requested', requestedById: actor.id,
+        captureDayId: day.id, salesId, slotOrder: 9999, startTime: slotTime, status: 'requested', requestedById: actor.id,
       });
       created.push({ salesId, bookingId: b.id });
+      offset++;
     } catch (e: any) {
       if (!(e instanceof HttpError)) throw e;
       failed.push({ salesId, name, error: e.message });
@@ -164,11 +187,13 @@ export async function listRequests() {
         return {
           id: r.id,
           date: r.day!.date,
+          startTime: r.startTime,
           weekStart: r.day!.weekStart,
           salesId: r.salesId,
           name: p?.name ?? 'Unknown',
           supervisorName: p?.supervisorId ? supName.get(p.supervisorId) ?? null : null,
           requestedBy: r.requestedById ? byId.get(r.requestedById)?.name ?? null : null,
+          passed: isTimePassed(r.day!.date, r.startTime, config.timezone),
         };
       })
       .sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id),
@@ -179,6 +204,9 @@ export async function approveRequest(actor: User, bookingId: number, body: unkno
   const { override } = z.object({ override: z.boolean().optional() }).parse(body ?? {});
   const b = await Booking.findByPk(bookingId, { include: [{ model: CaptureDay, as: 'day' }] });
   if (!b || b.status !== 'requested') throw new HttpError(404, 'Request not found');
+  if (!override && isTimePassed(b.day!.date, b.startTime, config.timezone)) {
+    throw new HttpError(422, `Cannot approve: the slot on ${prettyDay(b.day!.date)} at ${b.startTime} has already passed.`, 'TIME_PASSED');
+  }
   const settings = await getSettings();
   await checkPlacement(b.salesId, b.day!, settings, { ignoreBookingIds: [b.id], override });
   b.status = 'planned';
