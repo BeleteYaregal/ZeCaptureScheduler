@@ -539,6 +539,28 @@ test('supervisor cannot request past times; admin cannot approve without overrid
   // 4. Admin with override can approve
   const approveOverride = await api('POST', `/api/requests/${passedBooking.id}/approve`, tokens.admin, { override: true });
   assert.equal(approveOverride.status, 200);
+
+  // 5. Admin can reschedule date and time when approving a passed request
+  const futureWs = add(nextMonday, 28);
+  const futureDay = await CaptureDay.create({ weekStart: futureWs, date: add(futureWs, 1), type: 'sales', startTime: '10:00', status: 'active' });
+  const passedBooking2 = await Booking.create({ captureDayId: pastDay.id, salesId: mine[1], slotOrder: 0, startTime: '09:00', status: 'requested', requestedById: supUser!.id });
+  const approveRescheduled = await api('POST', `/api/requests/${passedBooking2.id}/approve`, tokens.admin, {
+    captureDayId: futureDay.id,
+    startTime: '10:30',
+  });
+  assert.equal(approveRescheduled.status, 200);
+  assert.equal(approveRescheduled.body.date, futureDay.date);
+  assert.equal(approveRescheduled.body.startTime, '10:00');
+  const reloaded = await Booking.findByPk(passedBooking2.id);
+  assert.equal(reloaded!.captureDayId, futureDay.id);
+  assert.equal(reloaded!.startTime, '10:00');
+  assert.equal(reloaded!.status, 'planned');
+
+  // 6. Test GET /api/requests/available-days
+  const avail = await api('GET', '/api/requests/available-days', tokens.admin);
+  assert.equal(avail.status, 200);
+  assert.ok(Array.isArray(avail.body.days));
+  assert.ok(avail.body.days.some((d: any) => d.id === futureDay.id));
 });
 
 test('standard week: apply to several weeks, build and publish, skip what is planned', async () => {

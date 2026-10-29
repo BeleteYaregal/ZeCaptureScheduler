@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { requireAuth, requireRole } from '../auth';
 import { wrap } from '../http';
 import {
-  approveRequest, createMember, createRequests, declineRequest, listMembers, listRequests, patchMember, withdrawRequest,
+  approveRequest, createMember, createRequests, declineRequest, listAvailableDays, listMembers, listRequests, patchMember, withdrawRequest,
 } from '../services/team';
 
 export const teamRouter = Router();
@@ -18,5 +18,6 @@ teamRouter.delete('/team/requests/:id', requireRole('supervisor'), wrap(async (r
 
 // Admin
 teamRouter.get('/requests', requireRole('admin'), wrap(async (_req, res) => res.json(await listRequests())));
+teamRouter.get('/requests/available-days', requireRole('admin'), wrap(async (_req, res) => res.json(await listAvailableDays())));
 teamRouter.post('/requests/:id/approve', requireRole('admin'), wrap(async (req, res) => res.json(await approveRequest(req.user!, id(req.params.id), req.body))));
 teamRouter.post('/requests/:id/decline', requireRole('admin'), wrap(async (req, res) => res.json(await declineRequest(req.user!, id(req.params.id), req.body))));

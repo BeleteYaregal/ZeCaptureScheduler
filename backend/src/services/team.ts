@@ -8,7 +8,7 @@ import { Booking, CaptureDay, Supervisor, User } from '../models';
 import { getSettings } from '../settings';
 import { audit, notify } from './log';
 import { assertTeamRoom, teamIds } from './org';
-import { checkPlacement, OCCUPYING, recomputeSlots, removeFutureBookingsFor, weekIsPublished } from './weeks';
+import { capForWeek, checkPlacement, OCCUPYING, recomputeSlots, removeFutureBookingsFor, weekIsPublished } from './weeks';
 
 /** The Supervisor record behind a supervisor login. */
 export async function mySupervisor(actor: User): Promise<Supervisor> {
@@ -200,22 +200,130 @@ export async function listRequests() {
   };
 }
 
+export async function listAvailableDays() {
+  const today = todayIn(config.timezone);
+  const settings = await getSettings();
+  const days = await CaptureDay.findAll({
+    where: {
+      type: 'sales',
+      status: 'active',
+      date: { [Op.gte]: today },
+    },
+    order: [['date', 'ASC']],
+    limit: 30,
+  });
+
+  const list: {
+    id: number;
+    date: string;
+    startTime: string;
+    nextSlotTime: string;
+    load: number;
+    capacity: number;
+  }[] = [];
+
+  for (const d of days) {
+    const load = await Booking.count({
+      where: { captureDayId: d.id, status: { [Op.ne]: 'rescheduled' } },
+    });
+    const cap = await capForWeek(d.weekStart, settings);
+    const nextSlot = addMinutes(d.startTime, load * settings.slot_minutes);
+    const isPassed = d.date === today && isTimePassed(d.date, nextSlot, config.timezone);
+    if (!isPassed && load < cap) {
+      list.push({
+        id: d.id,
+        date: d.date,
+        startTime: d.startTime,
+        nextSlotTime: nextSlot,
+        load,
+        capacity: cap,
+      });
+    }
+  }
+
+  return { days: list };
+}
+
 export async function approveRequest(actor: User, bookingId: number, body: unknown) {
-  const { override } = z.object({ override: z.boolean().optional() }).parse(body ?? {});
+  const { override, captureDayId, startTime } = z
+    .object({
+      override: z.boolean().optional(),
+      captureDayId: z.number().int().optional(),
+      startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+    })
+    .parse(body ?? {});
+
   const b = await Booking.findByPk(bookingId, { include: [{ model: CaptureDay, as: 'day' }] });
   if (!b || b.status !== 'requested') throw new HttpError(404, 'Request not found');
-  if (!override && isTimePassed(b.day!.date, b.startTime, config.timezone)) {
-    throw new HttpError(422, `Cannot approve: the slot on ${prettyDay(b.day!.date)} at ${b.startTime} has already passed.`, 'TIME_PASSED');
-  }
+
   const settings = await getSettings();
-  await checkPlacement(b.salesId, b.day!, settings, { ignoreBookingIds: [b.id], override });
+  let targetDay = b.day!;
+  let targetStartTime = startTime ?? b.startTime;
+
+  if (captureDayId && captureDayId !== b.captureDayId) {
+    const newDay = await CaptureDay.findByPk(captureDayId);
+    if (!newDay || newDay.type !== 'sales' || newDay.status !== 'active') {
+      throw new HttpError(422, 'Invalid target sales day', 'BAD_DAY');
+    }
+    targetDay = newDay;
+    if (!startTime) {
+      const existing = await Booking.count({
+        where: { captureDayId: targetDay.id, status: { [Op.ne]: 'rescheduled' } },
+      });
+      targetStartTime = addMinutes(targetDay.startTime, existing * settings.slot_minutes);
+    }
+  }
+
+  if (!override && isTimePassed(targetDay.date, targetStartTime, config.timezone)) {
+    throw new HttpError(
+      422,
+      `Cannot approve: the slot on ${prettyDay(targetDay.date)} at ${targetStartTime} has already passed. Please choose an upcoming date and time.`,
+      'TIME_PASSED'
+    );
+  }
+
+  await checkPlacement(b.salesId, targetDay, settings, { ignoreBookingIds: [b.id], override });
+
+  const oldDayId = b.captureDayId;
+  const dayChanged = targetDay.id !== oldDayId;
+
+  b.captureDayId = targetDay.id;
+  b.startTime = targetStartTime;
   b.status = 'planned';
   await b.save();
-  const when = prettyDay(b.day!.date);
-  if (b.requestedById) await notify([b.requestedById], 'Request approved', `${(await User.findByPk(b.salesId))?.name ?? 'Your salesperson'} is booked on ${when}.`);
-  if (await weekIsPublished(b.day!.weekStart)) await notify([b.salesId], 'Capture scheduled', `You are booked for ${when} at ${b.startTime}.`);
-  await audit(actor.id, 'request.approve', 'booking', b.id, { salesId: b.salesId, day: b.day!.date });
-  return { ok: true };
+
+  if (dayChanged) {
+    await recomputeSlots(oldDayId, settings);
+  }
+  await recomputeSlots(targetDay.id, settings);
+  if (startTime) {
+    b.startTime = startTime;
+    await b.save();
+  }
+  await b.reload();
+
+  const when = `${prettyDay(targetDay.date)} at ${b.startTime}`;
+  const rescheduledNote = dayChanged ? ' (rescheduled)' : '';
+
+  if (b.requestedById) {
+    await notify(
+      [b.requestedById],
+      'Request approved',
+      `${(await User.findByPk(b.salesId))?.name ?? 'Your salesperson'} is booked for ${when}${rescheduledNote}.`
+    );
+  }
+  if (await weekIsPublished(targetDay.weekStart)) {
+    await notify([b.salesId], 'Capture scheduled', `You are booked for ${when}${rescheduledNote}.`);
+  }
+
+  await audit(actor.id, 'request.approve', 'booking', b.id, {
+    salesId: b.salesId,
+    day: targetDay.date,
+    startTime: b.startTime,
+    rescheduledFrom: dayChanged ? b.day!.date : undefined,
+  });
+
+  return { ok: true, bookingId: b.id, date: targetDay.date, startTime: b.startTime };
 }
 
 export async function declineRequest(actor: User, bookingId: number, body: unknown) {
