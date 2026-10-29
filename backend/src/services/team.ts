@@ -376,7 +376,7 @@ export async function approveRequest(actor: User, bookingId: number, body: unkno
 }
 
 export async function declineRequest(actor: User, bookingId: number, body: unknown) {
-  const { reason } = z.object({ reason: z.string().trim().max(120).optional() }).parse(body ?? {});
+  const { reason } = z.object({ reason: z.string().trim().max(300).optional() }).parse(body ?? {});
   const b = await Booking.findByPk(bookingId, { include: [{ model: CaptureDay, as: 'day' }] });
   if (!b || b.status !== 'requested') throw new HttpError(404, 'Request not found');
   const day = b.day!;
@@ -384,7 +384,8 @@ export async function declineRequest(actor: User, bookingId: number, body: unkno
   await recomputeSlots(day.id, await getSettings());
   if (b.requestedById) {
     const name = (await User.findByPk(b.salesId))?.name ?? 'Your salesperson';
-    await notify([b.requestedById], 'Request declined', `${name} on ${prettyDay(day.date)} was not approved.${reason ? ' ' + reason : ''}`.slice(0, 400));
+    const reasonText = reason ? ` Reason: ${reason}` : '';
+    await notify([b.requestedById], 'Request declined', `${name} on ${prettyDay(day.date)} was not approved.${reasonText}`.slice(0, 400));
   }
   await audit(actor.id, 'request.decline', 'booking', bookingId, { salesId: b.salesId, day: day.date, reason: reason ?? null });
 

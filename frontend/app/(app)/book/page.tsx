@@ -5,7 +5,7 @@ import { IconChevronL, IconChevronR, IconEmpty } from '@/components/Icons';
 import { Empty, ErrorBox, Loading, Notice, Sheet, useToast } from '@/components/ui';
 import { api, emitDataChanged, useFetch } from '@/lib/api';
 import { addDays, addMinutes, computeDaySlots, longDay, mondayOf, nowTimeStr, todayStr, weekdayIndex, weekRange } from '@/lib/dates';
-import type { DayView, WeekView } from '@/lib/types';
+import type { DayView, NotificationItem, WeekView } from '@/lib/types';
 
 interface Member {
   id: number;
@@ -21,8 +21,10 @@ export default function BookPage() {
   const [pick, setPick] = useState<DayView | null>(null);
   const week = useFetch<WeekView>(`/api/weeks/${weekStart}`);
   const team = useFetch<{ members: Member[]; perDay: number }>('/api/team/members');
+  const alerts = useFetch<{ items: NotificationItem[] }>('/api/notifications?limit=5');
   if (!user || user.role !== 'supervisor') return null;
 
+  const recentDecline = alerts.data?.items.find((n) => n.title === 'Request declined');
   const data = week.data;
   const limit = data?.limits.supervisorMaxPerDay ?? team.data?.perDay ?? 0;
   const slotMinutes = data?.limits.slotMinutes ?? 30;
@@ -51,6 +53,12 @@ export default function BookPage() {
           </p>
         </div>
       </div>
+
+      {recentDecline && (
+        <Notice kind="info">
+          <strong>Notice from manager:</strong> {recentDecline.body}
+        </Notice>
+      )}
 
       <div className="weeknav">
         <button className="iconbtn" aria-label="Previous week" disabled={weekStart <= mondayOf(today)} onClick={() => setWeekStart(addDays(weekStart, -7))}>

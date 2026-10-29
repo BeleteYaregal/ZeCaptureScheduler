@@ -35,6 +35,7 @@ export default function RequestsPage() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [rescheduleReq, setRescheduleReq] = useState<Req | null>(null);
+  const [declineReq, setDeclineReq] = useState<Req | null>(null);
 
   useEffect(() => {
     if (user && user.role !== 'admin') router.replace('/');
@@ -46,7 +47,7 @@ export default function RequestsPage() {
 
   if (!user || user.role !== 'admin') return null;
 
-  async function act(r: Req, what: 'approve' | 'decline') {
+  async function act(r: Req, what: 'approve') {
     if (what === 'approve' && r.passed) {
       setRescheduleReq(r);
       return;
@@ -55,7 +56,7 @@ export default function RequestsPage() {
     setErr(null);
     try {
       await api(`/api/requests/${r.id}/${what}`, { method: 'POST', body: {} });
-      toast(what === 'approve' ? 'Approved' : 'Declined');
+      toast('Approved');
       await reload();
       emitDataChanged();
       refreshUnread();
@@ -133,7 +134,7 @@ export default function RequestsPage() {
                     {r.supervisorName ?? 'No supervisor'}{r.startTime ? ` · Slot at ${r.startTime}` : ''}
                   </div>
                 </div>
-                <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => act(r, 'decline')}>
+                <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => setDeclineReq(r)}>
                   Decline
                 </button>
                 {r.passed ? (
@@ -156,6 +157,19 @@ export default function RequestsPage() {
           onClose={() => setRescheduleReq(null)}
           onDone={() => {
             setRescheduleReq(null);
+            reload();
+            emitDataChanged();
+            refreshUnread();
+          }}
+        />
+      )}
+
+      {declineReq && (
+        <DeclineSheet
+          req={declineReq}
+          onClose={() => setDeclineReq(null)}
+          onDone={() => {
+            setDeclineReq(null);
             reload();
             emitDataChanged();
             refreshUnread();
@@ -282,3 +296,98 @@ function RescheduleSheet({
     </Sheet>
   );
 }
+
+function DeclineSheet({
+  req,
+  onClose,
+  onDone,
+}: {
+  req: Req;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const toast = useToast();
+  const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const presets = [
+    'Day capacity is full',
+    'Videographer unavailable',
+    'Please request next week',
+    'Quota reached for today',
+  ];
+
+  async function submit() {
+    setSubmitting(true);
+    setErr(null);
+    try {
+      await api(`/api/requests/${req.id}/decline`, {
+        method: 'POST',
+        body: { reason: reason.trim() || undefined },
+      });
+      toast(`Declined request for ${req.name}`);
+      onDone();
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Sheet
+      title="Decline request"
+      subtitle={`Decline ${req.name} on ${longDay(req.date)}${req.startTime ? ` (${req.startTime})` : ''}`}
+      onClose={onClose}
+    >
+      {err && <Notice kind="error">{err}</Notice>}
+
+      <p className="small muted" style={{ marginBottom: 12 }}>
+        Provide a remark or reason so the supervisor understands why this slot could not be approved.
+      </p>
+
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: '0.82rem', fontWeight: 650, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+          Quick reason
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {presets.map((p) => (
+            <button
+              key={p}
+              type="button"
+              className={`btn btn-sm ${reason === p ? 'btn-primary' : 'btn-soft'}`}
+              style={{ fontSize: '0.82rem', padding: '5px 10px', borderRadius: 6 }}
+              onClick={() => setReason(p)}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <label className="label" style={{ display: 'block', marginBottom: 6 }}>
+          Reason / Remarks for supervisor
+        </label>
+        <textarea
+          className="input"
+          style={{ minHeight: 70, resize: 'vertical' }}
+          placeholder="e.g. Schedule is full on Thursday, please re-request for Friday"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+        />
+      </div>
+
+      <div className="btn-row">
+        <button className="btn btn-ghost" type="button" disabled={submitting} onClick={onClose}>
+          Cancel
+        </button>
+        <button className="btn btn-danger" type="button" disabled={submitting} onClick={submit}>
+          {submitting ? 'Declining…' : 'Decline with Reason'}
+        </button>
+      </div>
+    </Sheet>
+  );
+}
+
