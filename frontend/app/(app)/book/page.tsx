@@ -4,7 +4,7 @@ import { useAuth } from '@/components/Auth';
 import { IconChevronL, IconChevronR, IconEmpty } from '@/components/Icons';
 import { Empty, ErrorBox, Loading, Notice, Sheet, useToast } from '@/components/ui';
 import { api, useFetch } from '@/lib/api';
-import { addDays, addMinutes, isTimePassed, longDay, mondayOf, nowTimeStr, todayStr, weekdayIndex, weekRange } from '@/lib/dates';
+import { addDays, addMinutes, computeDaySlots, isTimePassed, longDay, mondayOf, nowTimeStr, todayStr, weekdayIndex, weekRange } from '@/lib/dates';
 import type { DayView, WeekView } from '@/lib/types';
 
 interface Member {
@@ -73,8 +73,12 @@ export default function BookPage() {
         const mine = d.bookings.filter((b) => b.status !== 'rescheduled');
         const dayFull = d.capacity !== null && (d.load ?? 0) >= d.capacity;
         const limitHit = mine.length >= limit;
-        const nextSlotTime = addMinutes(d.startTime || '09:00', (d.load ?? 0) * 30);
-        const timePassed = isTimePassed(d.date, nextSlotTime, today, nowTimeStr());
+        const occupied = new Set(d.bookings.filter((b) => b.status !== 'rescheduled').map((b) => b.startTime));
+        const daySlots = computeDaySlots(d.startTime, d.capacity ?? 8, 30, occupied, d.date, today, nowTimeStr());
+        const openSlots = daySlots.filter((s) => !s.passed && !s.occupied);
+        const allSlotsPassed = daySlots.length > 0 && daySlots.every((s) => s.passed);
+        const timePassed = d.date < today || (d.date === today && (allSlotsPassed || openSlots.length === 0));
+        const nextSlot = openSlots[0]?.time ?? d.startTime ?? '09:00';
         return (
           <div key={d.id} className="list" style={{ marginBottom: 14 }}>
             <div className="group-head">
@@ -82,7 +86,7 @@ export default function BookPage() {
                 <div className="name">{longDay(d.date)}</div>
                 <div className="small muted">
                   Your team {mine.length}/{limit} · Day {d.load ?? 0}/{d.capacity ?? '–'}
-                  {timePassed && ' · Time passed'}
+                  {timePassed ? ' · All times passed' : ` · Next slot ${nextSlot}`}
                 </div>
               </div>
               <button className="btn btn-primary btn-sm" disabled={timePassed || dayFull || limitHit} onClick={() => setPick(d)}>
@@ -129,19 +133,42 @@ function RequestSheet({ day, members, busy, room, onClose, onDone }: { day: DayV
   const [sel, setSel] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
   const [errs, setErrs] = useState<string[]>([]);
-  const nextSlotTime = addMinutes(day.startTime || '09:00', (day.load ?? 0) * 30);
-  const isPassed = isTimePassed(day.date, nextSlotTime);
+
+  const today = todayStr();
+  const nowTime = nowTimeStr();
+  const occupied = new Set(day.bookings.filter((b) => b.status !== 'rescheduled').map((b) => b.startTime));
+  const slots = computeDaySlots(day.startTime, day.capacity ?? 8, 30, occupied, day.date, today, nowTime);
+  const openSlots = slots.filter((s) => !s.passed && !s.occupied);
+  const [selectedSlot, setSelectedSlot] = useState<string>(openSlots[0]?.time ?? day.startTime ?? '09:00');
+
+  const allPassed = slots.length > 0 && slots.every((s) => s.passed);
   const toggle = (id: number) => setSel((s) => (s.includes(id) ? s.filter((x) => x !== id) : s.length < room ? [...s, id] : s));
 
+  const assignedSlots: string[] = [];
+  if (selectedSlot && sel.length > 0) {
+    let cur = selectedSlot;
+    const occ = new Set(occupied);
+    for (let i = 0; i < sel.length; i++) {
+      assignedSlots.push(cur);
+      occ.add(cur);
+      let next = addMinutes(cur, 30);
+      while (occ.has(next)) next = addMinutes(next, 30);
+      cur = next;
+    }
+  }
+
   async function send() {
-    if (isPassed) {
-      setErrs([`The available slot time on ${longDay(day.date)} (${nextSlotTime}) has already passed.`]);
+    if (allPassed) {
+      setErrs([`All available capture slots for ${longDay(day.date)} have already passed.`]);
       return;
     }
     setSaving(true);
     setErrs([]);
     try {
-      const r = await api<{ created: unknown[]; failed: { name: string; error: string }[] }>('/api/team/requests', { method: 'POST', body: { salesIds: sel, captureDayId: day.id } });
+      const r = await api<{ created: unknown[]; failed: { name: string; error: string }[] }>('/api/team/requests', {
+        method: 'POST',
+        body: { salesIds: sel, captureDayId: day.id, startTime: selectedSlot },
+      });
       if (r.failed.length) setErrs(r.failed.map((f) => `${f.name}: ${f.error}`));
       if (r.created.length) toast(`${r.created.length} sent for approval`);
       if (!r.failed.length) onDone();
@@ -155,9 +182,9 @@ function RequestSheet({ day, members, busy, room, onClose, onDone }: { day: DayV
 
   return (
     <Sheet title={`Request ${longDay(day.date)}`} subtitle={`You can add ${room} more ${room === 1 ? 'person' : 'people'} on this day.`} onClose={errs.length ? onDone : onClose}>
-      {isPassed && (
+      {allPassed && (
         <Notice kind="error">
-          The capture time for this day ({nextSlotTime}) has already passed. Please close and select an upcoming day.
+          All capture slots for this day have already passed. Please close and select an upcoming day.
         </Notice>
       )}
       {errs.map((e, i) => (
@@ -165,13 +192,54 @@ function RequestSheet({ day, members, busy, room, onClose, onDone }: { day: DayV
           {e}
         </Notice>
       ))}
+
+      {slots.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: '0.82rem', fontWeight: 650, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Choose Start Time Slot
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {slots.map((s) => {
+              const disabled = s.passed || s.occupied;
+              const isSelected = selectedSlot === s.time;
+              return (
+                <button
+                  key={s.time}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => setSelectedSlot(s.time)}
+                  className={`btn btn-sm ${isSelected ? 'btn-primary' : 'btn-ghost'}`}
+                  style={{
+                    padding: '5px 10px',
+                    fontSize: '0.82rem',
+                    borderRadius: 6,
+                    opacity: disabled ? 0.35 : 1,
+                    textDecoration: s.passed ? 'line-through' : undefined,
+                    border: isSelected ? '1.5px solid var(--primary)' : '1px solid var(--border)',
+                  }}
+                  title={s.passed ? 'Time has passed' : s.occupied ? 'Already booked' : 'Available'}
+                >
+                  {s.time}
+                  {s.occupied ? ' (Booked)' : s.passed ? ' (Passed)' : ''}
+                </button>
+              );
+            })}
+          </div>
+          {assignedSlots.length > 0 && (
+            <div className="small muted" style={{ marginTop: 8 }}>
+              {assignedSlots.length === 1 ? 'Selected slot' : 'Consecutive slots'}: <strong>{assignedSlots.join(', ')}</strong>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="list">
         {members.length === 0 && <p className="pad muted">Register your salespeople in My team first.</p>}
         {members.map((m) => {
           const taken = busy.has(m.id);
           return (
             <label key={m.id} className="row" style={{ opacity: taken ? 0.5 : 1 }}>
-              <input type="checkbox" checked={sel.includes(m.id)} disabled={isPassed || taken || (!sel.includes(m.id) && sel.length >= room)} onChange={() => toggle(m.id)} />
+              <input type="checkbox" checked={sel.includes(m.id)} disabled={allPassed || taken || (!sel.includes(m.id) && sel.length >= room)} onChange={() => toggle(m.id)} />
               <div className="grow name">{m.name}</div>
               {taken && <span className="small muted">Already booked this week</span>}
             </label>
@@ -179,8 +247,8 @@ function RequestSheet({ day, members, busy, room, onClose, onDone }: { day: DayV
         })}
       </div>
       <div style={{ height: 12 }} />
-      <button className="btn btn-primary btn-block" disabled={isPassed || saving || sel.length === 0} onClick={send}>
-        {isPassed ? 'Time has passed' : `Send ${sel.length || ''} ${sel.length === 1 ? 'request' : 'requests'}`}
+      <button className="btn btn-primary btn-block" disabled={allPassed || saving || sel.length === 0} onClick={send}>
+        {allPassed ? 'Time has passed' : `Send ${sel.length || ''} ${sel.length === 1 ? 'request' : 'requests'} for ${selectedSlot}`}
       </button>
     </Sheet>
   );

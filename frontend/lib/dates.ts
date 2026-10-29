@@ -67,3 +67,30 @@ export function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
   return ((parts[0]?.[0] || '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
 }
+
+export interface SlotInfo {
+  time: string;
+  passed: boolean;
+  occupied: boolean;
+}
+
+export function computeDaySlots(
+  startTime: string,
+  capacity: number,
+  slotMinutes: number,
+  occupiedTimes: Set<string>,
+  date: string,
+  today = todayStr(),
+  nowTime = nowTimeStr()
+): SlotInfo[] {
+  const cap = Math.max(1, capacity || 6);
+  const slots: SlotInfo[] = [];
+  for (let i = 0; i < cap; i++) {
+    const time = addMinutes(startTime || '09:00', i * (slotMinutes || 30));
+    const passed = isTimePassed(date, time, today, nowTime);
+    const occupied = occupiedTimes.has(time);
+    slots.push({ time, passed, occupied });
+  }
+  return slots;
+}
+

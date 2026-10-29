@@ -80,8 +80,12 @@ async function adminIds() {
 /** Supervisor asks for slots for several of his people on one day. Each is checked on its own. */
 export async function createRequests(actor: User, body: unknown) {
   const sup = await mySupervisor(actor);
-  const { salesIds, captureDayId } = z
-    .object({ salesIds: z.array(z.number().int()).min(1).max(60), captureDayId: z.number().int() })
+  const { salesIds, captureDayId, startTime } = z
+    .object({
+      salesIds: z.array(z.number().int()).min(1).max(60),
+      captureDayId: z.number().int(),
+      startTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+    })
     .parse(body);
   const settings = await getSettings();
   const day = await CaptureDay.findByPk(captureDayId);
@@ -89,26 +93,54 @@ export async function createRequests(actor: User, body: unknown) {
   const today = todayIn(config.timezone);
   if (day.date < today) throw new HttpError(422, 'That day has passed', 'BAD_DAY');
 
-  const existingBookings = await Booking.count({
+  const cap = await capForWeek(day.weekStart, settings);
+  const existingBookings = await Booking.findAll({
     where: { captureDayId: day.id, status: { [Op.ne]: 'rescheduled' } },
   });
+  const occupiedTimes = new Set(existingBookings.map((b) => b.startTime));
 
-  if (day.date === today) {
-    const nextSlot = addMinutes(day.startTime, existingBookings * settings.slot_minutes);
-    if (isTimePassed(day.date, nextSlot, config.timezone)) {
+  let initialSlot: string;
+  if (startTime) {
+    if (day.date === today && isTimePassed(day.date, startTime, config.timezone)) {
       throw new HttpError(
         422,
-        `The available capture time for today (${nextSlot}) has already passed. Please select an upcoming day.`,
+        `The requested slot at ${startTime} has already passed. Please select an upcoming slot.`,
         'TIME_PASSED'
       );
     }
+    if (occupiedTimes.has(startTime)) {
+      throw new HttpError(409, `The slot at ${startTime} is already booked.`, 'SLOT_OCCUPIED');
+    }
+    initialSlot = startTime;
+  } else {
+    // If no startTime specified, find the first upcoming open slot
+    let found: string | null = null;
+    const maxSlots = Math.max(cap, 24);
+    for (let s = 0; s < maxSlots; s++) {
+      const t = addMinutes(day.startTime, s * settings.slot_minutes);
+      if (day.date === today && isTimePassed(day.date, t, config.timezone)) continue;
+      if (occupiedTimes.has(t)) continue;
+      found = t;
+      break;
+    }
+    if (!found) {
+      if (day.date === today) {
+        throw new HttpError(
+          422,
+          'All available capture slots for today have already passed or are full. Please select an upcoming day.',
+          'TIME_PASSED'
+        );
+      }
+      found = addMinutes(day.startTime, existingBookings.length * settings.slot_minutes);
+    }
+    initialSlot = found;
   }
 
   const team = new Set(await teamIds(actor));
 
-  const created: { salesId: number; bookingId: number }[] = [];
+  const created: { salesId: number; bookingId: number; startTime: string }[] = [];
   const failed: { salesId: number; name: string; error: string }[] = [];
-  let offset = 0;
+  let currentSlot = initialSlot;
   for (const salesId of [...new Set(salesIds)]) {
     const person = await User.findByPk(salesId);
     const name = person?.name ?? 'Unknown';
@@ -121,16 +153,28 @@ export async function createRequests(actor: User, body: unknown) {
       if (mine >= settings.supervisor_max_per_day) {
         throw new HttpError(409, `Your daily limit is ${settings.supervisor_max_per_day} people (${prettyDay(day.date)}).`, 'SUP_LIMIT');
       }
-      const slotTime = addMinutes(day.startTime, (existingBookings + offset) * settings.slot_minutes);
-      if (isTimePassed(day.date, slotTime, config.timezone)) {
-        throw new HttpError(422, `The slot at ${slotTime} has already passed.`, 'TIME_PASSED');
+      if (isTimePassed(day.date, currentSlot, config.timezone)) {
+        throw new HttpError(422, `The slot at ${currentSlot} has already passed.`, 'TIME_PASSED');
       }
       await checkPlacement(salesId, day, settings, {});
+
+      const [h0, m0] = day.startTime.split(':').map(Number);
+      const [h1, m1] = currentSlot.split(':').map(Number);
+      const diffMins = (h1 * 60 + m1) - (h0 * 60 + m0);
+      const slotOrder = Math.max(0, Math.floor(diffMins / (settings.slot_minutes || 30)));
+
       const b = await Booking.create({
-        captureDayId: day.id, salesId, slotOrder: 9999, startTime: slotTime, status: 'requested', requestedById: actor.id,
+        captureDayId: day.id, salesId, slotOrder, startTime: currentSlot, status: 'requested', requestedById: actor.id,
       });
-      created.push({ salesId, bookingId: b.id });
-      offset++;
+      created.push({ salesId, bookingId: b.id, startTime: currentSlot });
+      occupiedTimes.add(currentSlot);
+
+      // Advance to next open slot
+      let next = addMinutes(currentSlot, settings.slot_minutes);
+      while (occupiedTimes.has(next)) {
+        next = addMinutes(next, settings.slot_minutes);
+      }
+      currentSlot = next;
     } catch (e: any) {
       if (!(e instanceof HttpError)) throw e;
       failed.push({ salesId, name, error: e.message });
@@ -290,15 +334,14 @@ export async function approveRequest(actor: User, bookingId: number, body: unkno
   b.captureDayId = targetDay.id;
   b.startTime = targetStartTime;
   b.status = 'planned';
+  const [h0, m0] = targetDay.startTime.split(':').map(Number);
+  const [h1, m1] = targetStartTime.split(':').map(Number);
+  const diffMins = (h1 * 60 + m1) - (h0 * 60 + m0);
+  b.slotOrder = Math.max(0, Math.floor(diffMins / (settings.slot_minutes || 30)));
   await b.save();
 
   if (dayChanged) {
     await recomputeSlots(oldDayId, settings);
-  }
-  await recomputeSlots(targetDay.id, settings);
-  if (startTime) {
-    b.startTime = startTime;
-    await b.save();
   }
   await b.reload();
 

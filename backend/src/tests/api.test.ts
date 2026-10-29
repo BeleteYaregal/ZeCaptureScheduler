@@ -550,13 +550,23 @@ test('supervisor cannot request past times; admin cannot approve without overrid
   });
   assert.equal(approveRescheduled.status, 200);
   assert.equal(approveRescheduled.body.date, futureDay.date);
-  assert.equal(approveRescheduled.body.startTime, '10:00');
+  assert.equal(approveRescheduled.body.startTime, '10:30');
   const reloaded = await Booking.findByPk(passedBooking2.id);
   assert.equal(reloaded!.captureDayId, futureDay.id);
-  assert.equal(reloaded!.startTime, '10:00');
+  assert.equal(reloaded!.startTime, '10:30');
   assert.equal(reloaded!.status, 'planned');
 
-  // 6. Test GET /api/requests/available-days
+  // 6. Supervisor can choose a specific time slot when requesting
+  const customSlotReq = await api('POST', '/api/team/requests', tokens.sup1, {
+    salesIds: [mine[2]],
+    captureDayId: futureDay.id,
+    startTime: '14:00',
+  });
+  assert.equal(customSlotReq.status, 201);
+  const createdBooking = await Booking.findByPk(customSlotReq.body.created[0].bookingId);
+  assert.equal(createdBooking!.startTime, '14:00');
+
+  // 7. Test GET /api/requests/available-days
   const avail = await api('GET', '/api/requests/available-days', tokens.admin);
   assert.equal(avail.status, 200);
   assert.ok(Array.isArray(avail.body.days));

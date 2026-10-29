@@ -1,7 +1,7 @@
 import { Op } from 'sequelize';
 import { z } from 'zod';
 import { config } from '../config';
-import { addDays, addMinutes, isValidDate, mondayOf, prettyDay, todayIn } from '../dates';
+import { addDays, addMinutes, isTimePassed, isValidDate, mondayOf, prettyDay, todayIn } from '../dates';
 import { HttpError } from '../http';
 import { Booking, CaptureDay, Unavailability, User, Week } from '../models';
 import { autoCap, buildSchedule } from '../scheduler';
@@ -52,9 +52,23 @@ async function recomputeSlots(dayId: number, settings: Settings): Promise<void> 
       ['id', 'ASC'],
     ],
   });
+  const today = todayIn(config.timezone);
   let i = 0;
   for (const b of list) {
+    if (b.status === 'requested' && b.startTime) {
+      i++;
+      continue;
+    }
     const start = addMinutes(day.startTime, i * settings.slot_minutes);
+    if (
+      day.date === today &&
+      isTimePassed(day.date, start, config.timezone) &&
+      b.startTime &&
+      !isTimePassed(day.date, b.startTime, config.timezone)
+    ) {
+      i++;
+      continue;
+    }
     if (b.slotOrder !== i || b.startTime !== start) {
       b.slotOrder = i;
       b.startTime = start;
