@@ -525,7 +525,7 @@ test('supervisor cannot request past times; admin cannot approve without overrid
     todayDay.startTime = '00:00';
     await todayDay.save();
   }
-  const todayReq = await api('POST', '/api/team/requests', tokens.sup1, { salesIds: [mine[0]], captureDayId: todayDay.id });
+  const todayReq = await api('POST', '/api/team/requests', tokens.sup1, { salesIds: [mine[0]], captureDayId: todayDay.id, startTime: '00:00' });
   assert.equal(todayReq.status, 422);
   assert.equal(todayReq.body.code, 'TIME_PASSED');
 

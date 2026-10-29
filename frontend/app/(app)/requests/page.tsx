@@ -132,14 +132,9 @@ export default function RequestsPage() {
                     Reschedule & Approve
                   </button>
                 ) : (
-                  <>
-                    <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => setRescheduleReq(r)} title="Change date/time">
-                      Change
-                    </button>
-                    <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => act(r, 'approve')}>
-                      Approve
-                    </button>
-                  </>
+                  <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => act(r, 'approve')}>
+                    Approve
+                  </button>
                 )}
               </div>
             ))}

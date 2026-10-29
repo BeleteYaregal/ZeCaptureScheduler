@@ -208,7 +208,7 @@ function SlotRow({ b, mine, showTeam, onOpen, onTick, onEdit }: { b: BookingView
       </span>
       <span className="acts">
         {b.status !== 'planned' && <span className={`pill pill-${b.status}`}>{STATUS_LABEL[b.status]}</span>}
-        {b.status === 'done' && <span className={`pill ${b.editDone ? 'pill-done' : ''}`}>{b.editDone ? 'Video edited' : 'Awaiting edit'}</span>}
+        {b.status === 'done' && b.editDone && <span className="pill pill-done">Video edited</span>}
         {mine && b.status === 'planned' && <span className="pill pill-sales">You</span>}
         {onOpen && <IconChevronR className="chev" />}
       </span>
@@ -445,11 +445,8 @@ function BookingMenu({
             <button className="action" disabled={busy} onClick={() => mark('done')}>
               <IconCheck /> Mark as done
             </button>
-            <button className="action" disabled={busy} onClick={() => mark('missed')}>
-              <IconX /> Mark as missed
-            </button>
             <button className="action" disabled={busy} onClick={() => mark('missed', true)}>
-              <IconWand /> Missed, rebook on the next free day
+              <IconX /> Mark as missed
             </button>
           </>
         )}
