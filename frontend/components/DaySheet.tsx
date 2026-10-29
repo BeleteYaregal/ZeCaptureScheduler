@@ -106,7 +106,7 @@ export default function DaySheet({ day, week, role, userId, published, onChanged
         </div>
         <div className="callbar">
           <span>
-            Call time <b className="num">{day.startTime}</b>
+            Hours <b className="num">{day.startTime} – {day.dayEndTime || '16:30'}</b>
           </span>
           {day.type === 'sales' && !cancelled && role !== 'sales' && (
             <span>

@@ -139,6 +139,7 @@ export async function getWeekView(weekStart: string, viewer: User) {
     maxTeamSize: settings.max_team_size,
     supervisorMaxPerDay: settings.supervisor_max_per_day,
     slotMinutes: settings.slot_minutes,
+    dayEndTime: settings.day_end_time || '16:30',
   };
   const blank = (status: string) => ({
     week: { weekStart, weekEnd, status, videographerId: null as number | null, videographerName: null as string | null, publishedAt: null as Date | null },
@@ -219,9 +220,11 @@ export async function getWeekView(weekStart: string, viewer: User) {
       const occList = occupiedByDay.get(d.id) ?? [];
       const occSet = new Set(occList);
       const dayCap = cap || 24;
+      const endTime = settings.day_end_time || '16:30';
       let nextSlot = d.startTime;
       for (let s = 0; s < dayCap; s++) {
         const t = addMinutes(d.startTime, s * settings.slot_minutes);
+        if (addMinutes(t, settings.slot_minutes) > endTime) break;
         if (d.date === today && isTimePassed(d.date, t, config.timezone)) continue;
         if (occSet.has(t)) continue;
         nextSlot = t;
@@ -233,6 +236,7 @@ export async function getWeekView(weekStart: string, viewer: User) {
         type: d.type,
         status: d.status,
         startTime: d.startTime,
+        dayEndTime: endTime,
         note: d.note,
         videographer: d.videographerId
           ? { id: d.videographerId, name: personMap.get(d.videographerId)?.name ?? 'Unknown' }

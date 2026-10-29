@@ -85,7 +85,7 @@ export default function BookPage() {
         const limitHit = mine.length >= limit;
         const gap = d.slotMinutes ?? slotMinutes;
         const occupied = new Set(d.occupiedSlots ?? d.bookings.filter((b) => b.status !== 'rescheduled').map((b) => b.startTime));
-        const daySlots = computeDaySlots(d.startTime, d.capacity ?? 8, gap, occupied, d.date, today, nowTimeStr());
+        const daySlots = computeDaySlots(d.startTime, d.capacity ?? 8, gap, occupied, d.date, today, nowTimeStr(), d.dayEndTime || '16:30');
         const openSlots = daySlots.filter((s) => !s.passed && !s.occupied);
         const allSlotsPassed = daySlots.length > 0 && daySlots.every((s) => s.passed);
         const timePassed = d.date < today || (d.date === today && (allSlotsPassed || openSlots.length === 0));
@@ -173,8 +173,9 @@ function RequestSheet({
   const today = todayStr();
   const nowTime = nowTimeStr();
   const gap = slotMinutes || day.slotMinutes || 30;
+  const endTime = day.dayEndTime || '16:30';
   const occupied = new Set(day.occupiedSlots ?? day.bookings.filter((b) => b.status !== 'rescheduled').map((b) => b.startTime));
-  const slots = computeDaySlots(day.startTime, day.capacity ?? 8, gap, occupied, day.date, today, nowTime);
+  const slots = computeDaySlots(day.startTime, day.capacity ?? 8, gap, occupied, day.date, today, nowTime, endTime);
   const openSlots = slots.filter((s) => !s.passed && !s.occupied);
   const firstSlot = day.nextSlotTime ?? openSlots[0]?.time ?? day.startTime ?? '09:00';
 

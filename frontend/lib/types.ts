@@ -24,6 +24,7 @@ export interface Settings {
   people_per_sales_day: number | null;
   slot_minutes: number;
   day_start_time: string;
+  day_end_time?: string;
   overdue_days: number;
 }
 
@@ -52,6 +53,7 @@ export interface DayView {
   type: 'sales' | 'company';
   status: 'active' | 'cancelled';
   startTime: string;
+  dayEndTime?: string;
   note: string | null;
   videographer: { id: number; name: string } | null;
   capacity: number | null;
@@ -72,7 +74,7 @@ export interface WeekView {
     videographerName: string | null;
     publishedAt: string | null;
   };
-  limits: { salesDays: number; companyDays: number; maxTeamSize: number; supervisorMaxPerDay: number; slotMinutes?: number };
+  limits: { salesDays: number; companyDays: number; maxTeamSize: number; supervisorMaxPerDay: number; slotMinutes?: number; dayEndTime?: string };
   days: DayView[];
   unscheduled: { id: number; name: string; supervisorName: string | null }[];
   warnings: string[];

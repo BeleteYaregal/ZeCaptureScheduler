@@ -94,6 +94,7 @@ export async function createRequests(actor: User, body: unknown) {
   if (day.date < today) throw new HttpError(422, 'That day has passed', 'BAD_DAY');
 
   const cap = await capForWeek(day.weekStart, settings);
+  const endTime = settings.day_end_time || '16:30';
   const existingBookings = await Booking.findAll({
     where: { captureDayId: day.id, status: { [Op.ne]: 'rescheduled' } },
   });
@@ -101,6 +102,10 @@ export async function createRequests(actor: User, body: unknown) {
 
   let initialSlot: string;
   if (startTime) {
+    const slotEnd = addMinutes(startTime, settings.slot_minutes);
+    if (startTime < day.startTime || slotEnd > endTime) {
+      throw new HttpError(422, `Requested time ${startTime} is outside working hours (${day.startTime} to ${endTime}).`, 'OUTSIDE_HOURS');
+    }
     if (day.date === today && isTimePassed(day.date, startTime, config.timezone)) {
       throw new HttpError(
         422,
@@ -113,11 +118,12 @@ export async function createRequests(actor: User, body: unknown) {
     }
     initialSlot = startTime;
   } else {
-    // If no startTime specified, find the first upcoming open slot
+    // If no startTime specified, find the first upcoming open slot within working hours
     let found: string | null = null;
     const maxSlots = Math.max(cap, 24);
     for (let s = 0; s < maxSlots; s++) {
       const t = addMinutes(day.startTime, s * settings.slot_minutes);
+      if (addMinutes(t, settings.slot_minutes) > endTime) break;
       if (day.date === today && isTimePassed(day.date, t, config.timezone)) continue;
       if (occupiedTimes.has(t)) continue;
       found = t;
@@ -127,7 +133,7 @@ export async function createRequests(actor: User, body: unknown) {
       if (day.date === today) {
         throw new HttpError(
           422,
-          'All available capture slots for today have already passed or are full. Please select an upcoming day.',
+          `All available capture slots for today within working hours (${day.startTime} to ${endTime}) have passed or are full. Please select an upcoming day.`,
           'TIME_PASSED'
         );
       }
@@ -152,6 +158,9 @@ export async function createRequests(actor: User, body: unknown) {
       });
       if (mine >= settings.supervisor_max_per_day) {
         throw new HttpError(409, `Your daily limit is ${settings.supervisor_max_per_day} people (${prettyDay(day.date)}).`, 'SUP_LIMIT');
+      }
+      if (addMinutes(currentSlot, settings.slot_minutes) > endTime) {
+        throw new HttpError(422, `Cannot schedule at ${currentSlot}: working hours finish at ${endTime}.`, 'OUTSIDE_HOURS');
       }
       if (isTimePassed(day.date, currentSlot, config.timezone)) {
         throw new HttpError(422, `The slot at ${currentSlot} has already passed.`, 'TIME_PASSED');
@@ -272,9 +281,11 @@ export async function listAvailableDays() {
       where: { captureDayId: d.id, status: { [Op.ne]: 'rescheduled' } },
     });
     const cap = await capForWeek(d.weekStart, settings);
+    const endTime = settings.day_end_time || '16:30';
     const nextSlot = addMinutes(d.startTime, load * settings.slot_minutes);
+    const slotEnd = addMinutes(nextSlot, settings.slot_minutes);
     const isPassed = d.date === today && isTimePassed(d.date, nextSlot, config.timezone);
-    if (!isPassed && load < cap) {
+    if (!isPassed && load < cap && slotEnd <= endTime) {
       list.push({
         id: d.id,
         date: d.date,
@@ -324,6 +335,16 @@ export async function approveRequest(actor: User, bookingId: number, body: unkno
       422,
       `Cannot approve: the slot on ${prettyDay(targetDay.date)} at ${targetStartTime} has already passed. Please choose an upcoming date and time.`,
       'TIME_PASSED'
+    );
+  }
+
+  const endTime = settings.day_end_time || '16:30';
+  const slotEnd = addMinutes(targetStartTime, settings.slot_minutes);
+  if (!override && (targetStartTime < targetDay.startTime || slotEnd > endTime)) {
+    throw new HttpError(
+      422,
+      `Cannot approve: slot ${targetStartTime} is outside working hours (${targetDay.startTime} to ${endTime}).`,
+      'OUTSIDE_HOURS'
     );
   }
 

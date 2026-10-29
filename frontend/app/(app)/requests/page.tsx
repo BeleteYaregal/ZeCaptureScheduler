@@ -273,10 +273,12 @@ function RescheduleSheet({
           </div>
 
           <div>
-            <label className="label" style={{ display: 'block', marginBottom: 6 }}>Start time</label>
+            <label className="label" style={{ display: 'block', marginBottom: 6 }}>Start time (working hours: 09:00 – 16:30)</label>
             <input
               type="time"
               className="input"
+              min="09:00"
+              max="16:00"
               value={slotTime}
               onChange={(e) => setSlotTime(e.target.value)}
             />

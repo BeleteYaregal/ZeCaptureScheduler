@@ -161,6 +161,9 @@ export default function SettingsPage() {
             <Row title="First capture at">
               <input className="input" type="time" style={{ width: 130 }} value={s.day_start_time} onChange={(e) => set('day_start_time', e.target.value)} aria-label="First capture time" />
             </Row>
+            <Row title="Day finishes at" hint="Last capture must end by this time (default 16:30)">
+              <input className="input" type="time" style={{ width: 130 }} value={s.day_end_time || '16:30'} onChange={(e) => set('day_end_time', e.target.value)} aria-label="Day finish time" />
+            </Row>
           </div>
 
           <h2 className="h2" style={{ margin: '26px 0 10px' }}>Overdue</h2>

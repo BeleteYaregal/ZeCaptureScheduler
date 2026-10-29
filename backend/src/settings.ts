@@ -22,6 +22,8 @@ export interface Settings {
   slot_minutes: number;
   /** First slot of the day, HH:MM. */
   day_start_time: string;
+  /** Last slot/end of the working day, HH:MM. */
+  day_end_time: string;
   /** A salesperson with no completed capture for this many days is "overdue". */
   overdue_days: number;
 }
@@ -36,6 +38,7 @@ export const DEFAULT_SETTINGS: Settings = {
   default_videographer_id: null,
   slot_minutes: 30,
   day_start_time: '09:00',
+  day_end_time: '16:30',
   overdue_days: 30,
 };
 
@@ -50,7 +53,12 @@ export const SettingsSchema = z
     supervisor_max_per_day: z.number().int().min(1).max(50),
     slot_minutes: z.number().int().min(5).max(240),
     day_start_time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use HH:MM (24h)'),
+    day_end_time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use HH:MM (24h)').default('16:30'),
     overdue_days: z.number().int().min(1).max(365),
+  })
+  .refine((s) => s.day_start_time < s.day_end_time, {
+    message: 'Day start time must be before day end time',
+    path: ['day_end_time'],
   })
   .refine((s) => s.week_pattern.filter((d) => d === 'sales').length <= s.sales_days_per_week, {
     message: 'The standard week has more sales days than the limit allows',

@@ -81,12 +81,15 @@ export function computeDaySlots(
   occupiedTimes: Set<string>,
   date: string,
   today = todayStr(),
-  nowTime = nowTimeStr()
+  nowTime = nowTimeStr(),
+  endTime = '16:30'
 ): SlotInfo[] {
   const cap = Math.max(1, capacity || 6);
   const slots: SlotInfo[] = [];
+  const gap = slotMinutes || 30;
   for (let i = 0; i < cap; i++) {
-    const time = addMinutes(startTime || '09:00', i * (slotMinutes || 30));
+    const time = addMinutes(startTime || '09:00', i * gap);
+    if (addMinutes(time, gap) > endTime) break;
     const passed = isTimePassed(date, time, today, nowTime);
     const occupied = occupiedTimes.has(time);
     slots.push({ time, passed, occupied });
