@@ -138,6 +138,7 @@ export async function getWeekView(weekStart: string, viewer: User) {
     companyDays: settings.company_days_per_week,
     maxTeamSize: settings.max_team_size,
     supervisorMaxPerDay: settings.supervisor_max_per_day,
+    slotMinutes: settings.slot_minutes,
   };
   const blank = (status: string) => ({
     week: { weekStart, weekEnd, status, videographerId: null as number | null, videographerName: null as string | null, publishedAt: null as Date | null },
@@ -195,6 +196,15 @@ export async function getWeekView(weekStart: string, viewer: User) {
   const loadByDay = new Map<number, number>();
   for (const b of bookings) if (OCCUPYING.includes(b.status)) loadByDay.set(b.captureDayId, (loadByDay.get(b.captureDayId) ?? 0) + 1);
 
+  const today = todayIn(config.timezone);
+  const occupiedByDay = new Map<number, string[]>();
+  for (const b of bookings) {
+    if (OCCUPYING.includes(b.status) && b.startTime) {
+      if (!occupiedByDay.has(b.captureDayId)) occupiedByDay.set(b.captureDayId, []);
+      occupiedByDay.get(b.captureDayId)!.push(b.startTime);
+    }
+  }
+
   const out = {
     week: {
       weekStart,
@@ -205,20 +215,35 @@ export async function getWeekView(weekStart: string, viewer: User) {
       publishedAt: week.publishedAt,
     },
     limits,
-    days: days.map((d) => ({
-      id: d.id,
-      date: d.date,
-      type: d.type,
-      status: d.status,
-      startTime: d.startTime,
-      note: d.note,
-      videographer: d.videographerId
-        ? { id: d.videographerId, name: personMap.get(d.videographerId)?.name ?? 'Unknown' }
-        : null,
-      capacity: d.type === 'sales' ? cap : null,
-      load: loadByDay.get(d.id) ?? 0,
-      mine: shownBookings.filter((b) => b.captureDayId === d.id && OCCUPYING.includes(b.status)).length,
-      bookings: shownBookings
+    days: days.map((d) => {
+      const occList = occupiedByDay.get(d.id) ?? [];
+      const occSet = new Set(occList);
+      const dayCap = cap || 24;
+      let nextSlot = d.startTime;
+      for (let s = 0; s < dayCap; s++) {
+        const t = addMinutes(d.startTime, s * settings.slot_minutes);
+        if (d.date === today && isTimePassed(d.date, t, config.timezone)) continue;
+        if (occSet.has(t)) continue;
+        nextSlot = t;
+        break;
+      }
+      return {
+        id: d.id,
+        date: d.date,
+        type: d.type,
+        status: d.status,
+        startTime: d.startTime,
+        note: d.note,
+        videographer: d.videographerId
+          ? { id: d.videographerId, name: personMap.get(d.videographerId)?.name ?? 'Unknown' }
+          : null,
+        capacity: d.type === 'sales' ? cap : null,
+        load: loadByDay.get(d.id) ?? 0,
+        mine: shownBookings.filter((b) => b.captureDayId === d.id && OCCUPYING.includes(b.status)).length,
+        slotMinutes: settings.slot_minutes,
+        occupiedSlots: occList,
+        nextSlotTime: nextSlot,
+        bookings: shownBookings
         .filter((b) => b.captureDayId === d.id)
         .map((b) => {
           const p = personMap.get(b.salesId);
@@ -243,7 +268,8 @@ export async function getWeekView(weekStart: string, viewer: User) {
             },
           };
         }),
-    })),
+      };
+    }),
     unscheduled: [] as any[],
     warnings: [] as string[],
     stats: { salesDays: 0, companyDays: 0, booked: 0, planned: 0, done: 0, missed: 0 },

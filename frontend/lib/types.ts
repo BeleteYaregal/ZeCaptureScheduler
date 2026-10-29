@@ -57,6 +57,9 @@ export interface DayView {
   capacity: number | null;
   load?: number;
   mine?: number;
+  slotMinutes?: number;
+  occupiedSlots?: string[];
+  nextSlotTime?: string;
   bookings: BookingView[];
 }
 
@@ -69,7 +72,7 @@ export interface WeekView {
     videographerName: string | null;
     publishedAt: string | null;
   };
-  limits: { salesDays: number; companyDays: number; maxTeamSize: number; supervisorMaxPerDay: number };
+  limits: { salesDays: number; companyDays: number; maxTeamSize: number; supervisorMaxPerDay: number; slotMinutes?: number };
   days: DayView[];
   unscheduled: { id: number; name: string; supervisorName: string | null }[];
   warnings: string[];

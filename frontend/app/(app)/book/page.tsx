@@ -3,8 +3,8 @@ import { useState } from 'react';
 import { useAuth } from '@/components/Auth';
 import { IconChevronL, IconChevronR, IconEmpty } from '@/components/Icons';
 import { Empty, ErrorBox, Loading, Notice, Sheet, useToast } from '@/components/ui';
-import { api, useFetch } from '@/lib/api';
-import { addDays, computeDaySlots, longDay, mondayOf, nowTimeStr, todayStr, weekdayIndex, weekRange } from '@/lib/dates';
+import { api, emitDataChanged, useFetch } from '@/lib/api';
+import { addDays, addMinutes, computeDaySlots, longDay, mondayOf, nowTimeStr, todayStr, weekdayIndex, weekRange } from '@/lib/dates';
 import type { DayView, WeekView } from '@/lib/types';
 
 interface Member {
@@ -25,6 +25,7 @@ export default function BookPage() {
 
   const data = week.data;
   const limit = data?.limits.supervisorMaxPerDay ?? team.data?.perDay ?? 0;
+  const slotMinutes = data?.limits.slotMinutes ?? 30;
   const days = (data?.days ?? []).filter((d) => d.type === 'sales' && d.status === 'active' && d.date >= today);
   const bookedThisWeek = new Set((data?.days ?? []).flatMap((d) => d.bookings.filter((b) => b.status !== 'rescheduled').map((b) => b.person.id)));
   const reload = () => week.reload();
@@ -33,6 +34,7 @@ export default function BookPage() {
     try {
       await api(`/api/team/requests/${id}`, { method: 'DELETE' });
       toast('Removed');
+      emitDataChanged();
       reload();
     } catch (e: any) {
       toast(e.message);
@@ -73,12 +75,13 @@ export default function BookPage() {
         const mine = d.bookings.filter((b) => b.status !== 'rescheduled');
         const dayFull = d.capacity !== null && (d.load ?? 0) >= d.capacity;
         const limitHit = mine.length >= limit;
-        const occupied = new Set(d.bookings.filter((b) => b.status !== 'rescheduled').map((b) => b.startTime));
-        const daySlots = computeDaySlots(d.startTime, d.capacity ?? 8, 30, occupied, d.date, today, nowTimeStr());
+        const gap = d.slotMinutes ?? slotMinutes;
+        const occupied = new Set(d.occupiedSlots ?? d.bookings.filter((b) => b.status !== 'rescheduled').map((b) => b.startTime));
+        const daySlots = computeDaySlots(d.startTime, d.capacity ?? 8, gap, occupied, d.date, today, nowTimeStr());
         const openSlots = daySlots.filter((s) => !s.passed && !s.occupied);
         const allSlotsPassed = daySlots.length > 0 && daySlots.every((s) => s.passed);
         const timePassed = d.date < today || (d.date === today && (allSlotsPassed || openSlots.length === 0));
-        const nextSlot = openSlots[0]?.time ?? d.startTime ?? '09:00';
+        const nextSlot = d.nextSlotTime ?? openSlots[0]?.time ?? d.startTime ?? '09:00';
         return (
           <div key={d.id} className="list" style={{ marginBottom: 14 }}>
             <div className="group-head">
@@ -91,7 +94,7 @@ export default function BookPage() {
                     ? 'Day is full'
                     : limitHit
                     ? `Your ${mine.length} ${mine.length === 1 ? 'request' : 'requests'} booked`
-                    : `Next available: ${nextSlot}`}
+                    : `Next available: ${nextSlot} (${gap} min)`}
                 </div>
               </div>
               <button className="btn btn-primary btn-sm" disabled={timePassed || dayFull || limitHit} onClick={() => setPick(d)}>
@@ -103,7 +106,7 @@ export default function BookPage() {
               <div key={b.id} className="row">
                 <div className="grow">
                   <div className="name">{b.person.name}</div>
-                  <div className="small muted">{b.startTime}</div>
+                  <div className="small muted">Slot at {b.startTime}</div>
                 </div>
                 <span className={`pill ${b.status === 'requested' ? '' : `pill-${b.status === 'planned' ? 'sales' : b.status}`}`}>
                   {b.status === 'requested' ? 'Pending approval' : b.status === 'planned' ? 'Approved' : b.status === 'done' ? 'Done' : 'Missed'}
@@ -125,6 +128,7 @@ export default function BookPage() {
           members={(team.data?.members ?? []).filter((m) => m.active)}
           busy={bookedThisWeek}
           room={Math.max(0, limit - pick.bookings.filter((b) => b.status !== 'rescheduled').length)}
+          slotMinutes={pick.slotMinutes ?? slotMinutes}
           onClose={() => setPick(null)}
           onDone={() => {
             setPick(null);
@@ -136,7 +140,23 @@ export default function BookPage() {
   );
 }
 
-function RequestSheet({ day, members, busy, room, onClose, onDone }: { day: DayView; members: Member[]; busy: Set<number>; room: number; onClose: () => void; onDone: () => void }) {
+function RequestSheet({
+  day,
+  members,
+  busy,
+  room,
+  slotMinutes = 30,
+  onClose,
+  onDone,
+}: {
+  day: DayView;
+  members: Member[];
+  busy: Set<number>;
+  room: number;
+  slotMinutes?: number;
+  onClose: () => void;
+  onDone: () => void;
+}) {
   const toast = useToast();
   const [sel, setSel] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
@@ -144,13 +164,28 @@ function RequestSheet({ day, members, busy, room, onClose, onDone }: { day: DayV
 
   const today = todayStr();
   const nowTime = nowTimeStr();
-  const occupied = new Set(day.bookings.filter((b) => b.status !== 'rescheduled').map((b) => b.startTime));
-  const slots = computeDaySlots(day.startTime, day.capacity ?? 8, 30, occupied, day.date, today, nowTime);
+  const gap = slotMinutes || day.slotMinutes || 30;
+  const occupied = new Set(day.occupiedSlots ?? day.bookings.filter((b) => b.status !== 'rescheduled').map((b) => b.startTime));
+  const slots = computeDaySlots(day.startTime, day.capacity ?? 8, gap, occupied, day.date, today, nowTime);
   const openSlots = slots.filter((s) => !s.passed && !s.occupied);
-  const selectedSlot = openSlots[0]?.time ?? day.startTime ?? '09:00';
+  const firstSlot = day.nextSlotTime ?? openSlots[0]?.time ?? day.startTime ?? '09:00';
 
   const allPassed = slots.length > 0 && slots.every((s) => s.passed);
   const toggle = (id: number) => setSel((s) => (s.includes(id) ? s.filter((x) => x !== id) : s.length < room ? [...s, id] : s));
+
+  // Compute consecutive slots for each selected person, increasing based on the gap!
+  const assignedSlots: string[] = [];
+  if (firstSlot && sel.length > 0) {
+    let cur = firstSlot;
+    const occ = new Set(occupied);
+    for (let i = 0; i < sel.length; i++) {
+      assignedSlots.push(cur);
+      occ.add(cur);
+      let next = addMinutes(cur, gap);
+      while (occ.has(next)) next = addMinutes(next, gap);
+      cur = next;
+    }
+  }
 
   async function send() {
     if (allPassed) {
@@ -162,12 +197,17 @@ function RequestSheet({ day, members, busy, room, onClose, onDone }: { day: DayV
     try {
       const r = await api<{ created: unknown[]; failed: { name: string; error: string }[] }>('/api/team/requests', {
         method: 'POST',
-        body: { salesIds: sel, captureDayId: day.id, startTime: selectedSlot },
+        body: { salesIds: sel, captureDayId: day.id, startTime: firstSlot },
       });
       if (r.failed.length) setErrs(r.failed.map((f) => `${f.name}: ${f.error}`));
       if (r.created.length) toast(`${r.created.length} sent for approval`);
-      if (!r.failed.length) onDone();
-      else if (r.created.length) setSel([]);
+      if (!r.failed.length) {
+        emitDataChanged();
+        onDone();
+      } else if (r.created.length) {
+        emitDataChanged();
+        setSel([]);
+      }
     } catch (e: any) {
       setErrs([e.message]);
     } finally {
@@ -188,10 +228,21 @@ function RequestSheet({ day, members, busy, room, onClose, onDone }: { day: DayV
         </Notice>
       ))}
 
-      {!allPassed && openSlots.length > 0 && (
-        <p className="small muted" style={{ marginBottom: 10 }}>
-          Starting from <strong>{selectedSlot}</strong> — the first available slot on this day.
-        </p>
+      {!allPassed && (
+        <div style={{ marginBottom: 12, padding: '10px 14px', background: 'var(--surface-2, rgba(0,0,0,0.04))', borderRadius: 8 }}>
+          <div className="small" style={{ fontWeight: 600 }}>
+            {sel.length === 0 ? (
+              <span className="muted">Next available slot starts at <strong>{firstSlot}</strong> ({gap} min per capture)</span>
+            ) : sel.length === 1 ? (
+              <span>Requested slot: <strong style={{ color: 'var(--indigo-strong, #4f46e5)' }}>{assignedSlots[0]}</strong></span>
+            ) : (
+              <span>
+                Requested slots ({gap} min gap):{' '}
+                <strong style={{ color: 'var(--indigo-strong, #4f46e5)' }}>{assignedSlots.join(', ')}</strong>
+              </span>
+            )}
+          </div>
+        </div>
       )}
 
       <div className="list">
@@ -209,7 +260,13 @@ function RequestSheet({ day, members, busy, room, onClose, onDone }: { day: DayV
       </div>
       <div style={{ height: 12 }} />
       <button className="btn btn-primary btn-block" disabled={allPassed || saving || sel.length === 0} onClick={send}>
-        {allPassed ? 'Time has passed' : saving ? 'Sending…' : `Send ${sel.length || ''} request${sel.length === 1 ? '' : 's'}`}
+        {allPassed
+          ? 'Time has passed'
+          : saving
+          ? 'Sending…'
+          : sel.length <= 1
+          ? `Send request${sel.length === 1 ? ` for ${assignedSlots[0]}` : ''}`
+          : `Send ${sel.length} requests (${assignedSlots[0]} – ${assignedSlots[assignedSlots.length - 1]})`}
       </button>
     </Sheet>
   );

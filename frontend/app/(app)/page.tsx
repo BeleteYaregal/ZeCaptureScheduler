@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/components/Auth';
 import DaySheet from '@/components/DaySheet';
 import { IconChevronL, IconChevronR, IconEmpty } from '@/components/Icons';
@@ -33,6 +33,15 @@ export default function SchedulePage() {
     reload();
     next.reload();
   };
+
+  useEffect(() => {
+    const handler = () => {
+      reqs.reload();
+      reload();
+    };
+    window.addEventListener('app:data-changed', handler);
+    return () => window.removeEventListener('app:data-changed', handler);
+  }, [reqs, reload]);
 
   return (
     <div className="page">

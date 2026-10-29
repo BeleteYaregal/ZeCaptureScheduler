@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { config } from '../config';
 import { addMinutes, isTimePassed, prettyDay, todayIn } from '../dates';
 import { HttpError } from '../http';
-import { Booking, CaptureDay, Supervisor, User } from '../models';
+import { Booking, CaptureDay, Notification, Supervisor, User } from '../models';
 import { getSettings } from '../settings';
 import { audit, notify } from './log';
 import { assertTeamRoom, teamIds } from './org';
@@ -213,6 +213,7 @@ export async function withdrawRequest(actor: User, bookingId: number) {
 // ------------------------------------------------------------------ admin side
 
 export async function listRequests() {
+  await Notification.update({ read: true }, { where: { title: 'New booking request', read: false } }).catch(() => {});
   const rows = await Booking.findAll({
     where: { status: 'requested' },
     include: [{ model: CaptureDay, as: 'day', required: true }],
@@ -366,6 +367,11 @@ export async function approveRequest(actor: User, bookingId: number, body: unkno
     rescheduledFrom: dayChanged ? b.day!.date : undefined,
   });
 
+  const remaining = await Booking.count({ where: { status: 'requested' } });
+  if (remaining === 0) {
+    await Notification.update({ read: true }, { where: { title: 'New booking request', read: false } }).catch(() => {});
+  }
+
   return { ok: true, bookingId: b.id, date: targetDay.date, startTime: b.startTime };
 }
 
@@ -381,5 +387,11 @@ export async function declineRequest(actor: User, bookingId: number, body: unkno
     await notify([b.requestedById], 'Request declined', `${name} on ${prettyDay(day.date)} was not approved.${reason ? ' ' + reason : ''}`.slice(0, 400));
   }
   await audit(actor.id, 'request.decline', 'booking', bookingId, { salesId: b.salesId, day: day.date, reason: reason ?? null });
+
+  const remaining = await Booking.count({ where: { status: 'requested' } });
+  if (remaining === 0) {
+    await Notification.update({ read: true }, { where: { title: 'New booking request', read: false } }).catch(() => {});
+  }
+
   return { ok: true };
 }

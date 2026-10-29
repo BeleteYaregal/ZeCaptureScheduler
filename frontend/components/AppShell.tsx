@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import type { ReactElement, ReactNode } from 'react';
+import { useEffect, type ReactElement, type ReactNode } from 'react';
 import { useFetch } from '@/lib/api';
 import { useBrand, BrandLogo } from '@/lib/brand';
 import { ThemeToggle } from '@/lib/theme';
@@ -36,10 +36,25 @@ const TABS: Tab[] = [
 const MORE_PATHS = ['/more', '/settings', '/audit', '/alerts', '/reports', '/branding'];
 
 export default function AppShell({ children }: { children: ReactNode }) {
-  const { user, unread } = useAuth();
+  const { user, unread, refreshUnread } = useAuth();
   const { brand } = useBrand();
   const path = usePathname();
   const reqs = useFetch<{ items: unknown[] }>(user?.role === 'admin' ? '/api/requests' : null);
+
+  useEffect(() => {
+    const handler = () => {
+      reqs.reload();
+      refreshUnread();
+    };
+    window.addEventListener('app:data-changed', handler);
+    return () => window.removeEventListener('app:data-changed', handler);
+  }, [reqs, refreshUnread]);
+
+  useEffect(() => {
+    if (user?.role === 'admin') reqs.reload();
+    refreshUnread();
+  }, [path]);
+
   if (!user) return null;
   const pending = reqs.data?.items.length ?? 0;
   const tabs = TABS.filter((t) => t.roles.includes(user.role));

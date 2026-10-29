@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/components/Auth';
 import { IconChevronL, IconEmpty } from '@/components/Icons';
 import { Empty, ErrorBox, Loading, Notice, Sheet, useToast } from '@/components/ui';
-import { api, useFetch } from '@/lib/api';
+import { api, emitDataChanged, useFetch } from '@/lib/api';
 import { longDay } from '@/lib/dates';
 
 interface Req {
@@ -28,7 +28,7 @@ interface AvailableDay {
 }
 
 export default function RequestsPage() {
-  const { user } = useAuth();
+  const { user, refreshUnread } = useAuth();
   const router = useRouter();
   const toast = useToast();
   const { data, error, loading, reload } = useFetch<{ items: Req[] }>('/api/requests');
@@ -39,6 +39,11 @@ export default function RequestsPage() {
   useEffect(() => {
     if (user && user.role !== 'admin') router.replace('/');
   }, [user, router]);
+
+  useEffect(() => {
+    if (data) refreshUnread();
+  }, [data, refreshUnread]);
+
   if (!user || user.role !== 'admin') return null;
 
   async function act(r: Req, what: 'approve' | 'decline') {
@@ -52,6 +57,8 @@ export default function RequestsPage() {
       await api(`/api/requests/${r.id}/${what}`, { method: 'POST', body: {} });
       toast(what === 'approve' ? 'Approved' : 'Declined');
       await reload();
+      emitDataChanged();
+      refreshUnread();
     } catch (e: any) {
       setErr(`${r.name}: ${e.message}`);
     } finally {
@@ -76,7 +83,9 @@ export default function RequestsPage() {
     else if (passedCount > 0) toast(`Approved valid requests (${passedCount} passed requests need rescheduling)`);
     else toast('All approved');
     setBusy(false);
-    reload();
+    await reload();
+    emitDataChanged();
+    refreshUnread();
   }
 
   const items = data?.items ?? [];
@@ -148,6 +157,8 @@ export default function RequestsPage() {
           onDone={() => {
             setRescheduleReq(null);
             reload();
+            emitDataChanged();
+            refreshUnread();
           }}
         />
       )}

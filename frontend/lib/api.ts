@@ -111,3 +111,11 @@ export async function downloadFile(path: string, fallbackName: string) {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+/** Global event helper to notify all pages/components when bookings, requests or alerts change. */
+export function emitDataChanged() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('app:data-changed'));
+  }
+}
+
