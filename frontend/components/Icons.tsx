@@ -55,6 +55,8 @@ export const IconApple = (p: P) => (
   </svg>
 );
 
+export const IconIdCard = (p: P) => base(<><rect x="3" y="5" width="18" height="14" rx="2.5" /><circle cx="8.5" cy="11" r="2.2" /><path d="M5.5 16.5c.4-1.6 1.7-2.5 3-2.5s2.6.9 3 2.5M14 9.5h4.5M14 13.5h3" /></>, p);
+
 export const BrandMark = (p: P) => (
   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...p}>
     <rect x="3" y="7" width="12" height="10" rx="2.6" stroke="currentColor" strokeWidth="2" />

@@ -8,6 +8,7 @@ import { weeksRouter } from './routes/weeks';
 import { reportsRouter } from './routes/reports';
 import { teamRouter } from './routes/team';
 import { telegramRouter } from './routes/telegram';
+import { cardRouter } from './routes/card';
 import { getBranding } from './services/branding';
 
 export function createApp() {
@@ -16,7 +17,7 @@ export function createApp() {
   app.set('trust proxy', true);
   app.use(cors({ origin: config.corsOrigin === '*' ? true : config.corsOrigin.split(',').map((s) => s.trim()) }));
  
-  app.use(express.json({ limit: '600kb' }));
+  app.use(express.json({ limit: '6mb' }));
 
   app.get('/api/health', (_req, res) => res.json({ ok: true, time: new Date().toISOString() }));
   // Public: the sign-in screen needs the app name, logo and color before anyone is signed in.
@@ -52,6 +53,7 @@ export function createApp() {
   app.use('/api', reportsRouter);
   app.use('/api', teamRouter);
   app.use('/api', telegramRouter);
+  app.use('/api/card', cardRouter);
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
   app.use(errorHandler);
   return app;

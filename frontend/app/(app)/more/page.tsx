@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useState } from 'react';
-import { IconBell, IconChevronR, IconDatabase, IconFilm, IconHistory, IconLock, IconLogout, IconPalette, IconReport, IconSend, IconSettings, IconSmartphone } from '@/components/Icons';
+import { IconBell, IconChevronR, IconDatabase, IconFilm, IconHistory, IconIdCard, IconLock, IconLogout, IconPalette, IconReport, IconSend, IconSettings, IconSmartphone } from '@/components/Icons';
 import { InstallSheet } from '@/components/InstallPrompt';
 import { Notice, Sheet, useToast } from '@/components/ui';
 import { api, downloadFile, useFetch } from '@/lib/api';
@@ -60,6 +60,14 @@ export default function MorePage() {
         <>
           <h2 className="list-title">Manage</h2>
           <div className="list">
+            <Link href="/cards" className="row">
+              <IconIdCard className="ico" />
+              <div className="grow">
+                <div className="name">Business Cards & ID</div>
+                <div className="meta">Staff submissions, design reviews & approvals</div>
+              </div>
+              <IconChevronR className="ico" />
+            </Link>
             <Link href="/reports" className="row">
               <IconReport className="ico" />
               <div className="grow">
@@ -114,6 +122,14 @@ export default function MorePage() {
 
       <h2 className="list-title">Your account</h2>
       <div className="list">
+        <Link href="/card" className="row">
+          <IconIdCard className="ico" />
+          <div className="grow">
+            <div className="name">My Business Card</div>
+            <div className="meta">Submit details, review card design & approve</div>
+          </div>
+          <IconChevronR className="ico" />
+        </Link>
         {(user.role === 'sales' || user.role === 'videographer') && (
           <Link href="/days-off" className="row">
             <IconLock className="ico" />

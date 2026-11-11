@@ -6,21 +6,36 @@ export interface Brand {
   name: string;
   color: string;
   logo: string | null;
+  app_mode?: 'capture' | 'card';
+  card_name?: string;
 }
-export const DEFAULT_BRAND: Brand = { name: 'CaptureSheet', color: '#1a56db', logo: null };
+export const DEFAULT_BRAND: Brand = { name: 'CaptureSheet', color: '#1a56db', logo: null, app_mode: 'capture', card_name: 'ZeCard Info' };
 const KEY = 'callsheet.brand';
 
 interface BrandState {
   brand: Brand;
+  displayName: string;
   setBrand: (b: Brand) => void;
 }
-const Ctx = createContext<BrandState>({ brand: DEFAULT_BRAND, setBrand: () => {} });
+const Ctx = createContext<BrandState>({
+  brand: DEFAULT_BRAND,
+  displayName: 'CaptureSheet',
+  setBrand: () => {},
+});
 export const useBrand = () => useContext(Ctx);
 
 function cached(): Brand {
   try {
     const v = JSON.parse(localStorage.getItem(KEY) || 'null');
-    if (v && typeof v.name === 'string' && typeof v.color === 'string') return { name: v.name, color: v.color, logo: v.logo ?? null };
+    if (v && typeof v.name === 'string' && typeof v.color === 'string') {
+      return {
+        name: v.name,
+        color: v.color,
+        logo: v.logo ?? null,
+        app_mode: v.app_mode || 'capture',
+        card_name: v.card_name || 'ZeCard Info',
+      };
+    }
   } catch {
     /* ignore */
   }
@@ -31,8 +46,9 @@ export function BrandProvider({ children }: { children: ReactNode }) {
   const [brand, setBrandState] = useState<Brand>(DEFAULT_BRAND);
 
   const apply = useCallback((b: Brand) => {
+    const effectiveName = b.app_mode === 'card' ? (b.card_name || 'ZeCard Info') : b.name;
     document.documentElement.style.setProperty('--brand', b.color);
-    document.title = b.name;
+    document.title = effectiveName;
 
     // The icons must be the logo of the branding
     if (typeof window !== 'undefined') {
@@ -77,12 +93,22 @@ export function BrandProvider({ children }: { children: ReactNode }) {
     fetch('/api/branding', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((b) => {
-        if (b && typeof b.name === 'string') setBrand({ name: b.name, color: b.color || DEFAULT_BRAND.color, logo: b.logo ?? null });
+        if (b && typeof b.name === 'string') {
+          setBrand({
+            name: b.name,
+            color: b.color || DEFAULT_BRAND.color,
+            logo: b.logo ?? null,
+            app_mode: b.app_mode || 'capture',
+            card_name: b.card_name || 'ZeCard Info',
+          });
+        }
       })
       .catch(() => {});
   }, [apply, setBrand]);
 
-  return <Ctx.Provider value={{ brand, setBrand }}>{children}</Ctx.Provider>;
+  const displayName = brand.app_mode === 'card' ? (brand.card_name || 'ZeCard Info') : brand.name;
+
+  return <Ctx.Provider value={{ brand, displayName, setBrand }}>{children}</Ctx.Provider>;
 }
 
 /** The company logo if the admin uploaded one, otherwise the built-in mark. */

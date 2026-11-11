@@ -1,6 +1,46 @@
 // Sales managers are team groups; supervisors sign in to book their own team.
 export type Role = 'admin' | 'sales' | 'videographer' | 'supervisor';
 export type BookingStatus = 'planned' | 'done' | 'missed' | 'rescheduled' | 'requested';
+export type AppMode = 'capture' | 'card';
+export type CardStatus = 'draft' | 'submitted' | 'card_sent' | 'revision_requested' | 'approved';
+
+export interface CardFeedbackView {
+  id: number;
+  submissionId: number;
+  userId: number;
+  senderRole: 'admin' | 'staff';
+  message: string;
+  createdAt: string;
+}
+
+export interface CardSubmissionView {
+  id: number;
+  userId: number;
+  fullName: string;
+  email: string;
+  phones: string[];
+  positions: string[];
+  department?: string | null;
+  company?: string | null;
+  address?: string | null;
+  notes?: string | null;
+  photoUrl?: string | null;
+  cardDesignUrl?: string | null;
+  cardDesignBackUrl?: string | null;
+  adminNote?: string | null;
+  status: CardStatus;
+  approvedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  feedbacks?: CardFeedbackView[];
+  user?: {
+    id: number;
+    name: string;
+    username: string;
+    phone?: string | null;
+    role: string;
+  };
+}
 
 export interface User {
   id: number;
@@ -15,6 +55,9 @@ export interface User {
 export type DayKind = 'sales' | 'company' | 'off';
 
 export interface Settings {
+  app_mode?: AppMode;
+  card_app_name?: string;
+  allow_staff_registration?: boolean;
   max_team_size: number;
   supervisor_max_per_day: number;
   week_pattern: DayKind[];

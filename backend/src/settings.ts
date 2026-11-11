@@ -2,8 +2,15 @@ import { z } from 'zod';
 import { Setting } from './models';
 
 export type DayKind = 'sales' | 'company' | 'off';
+export type AppMode = 'capture' | 'card';
 
 export interface Settings {
+  /** Application active mode: 'capture' (Capture Scheduler) or 'card' (Business Card & ID Info). */
+  app_mode: AppMode;
+  /** App name when in card collection mode. */
+  card_app_name: string;
+  /** Whether staff can register themselves. */
+  allow_staff_registration: boolean;
   /** Max salespeople one supervisor can have. */
   max_team_size: number;
   /** Max sales days (days where salespeople are captured) per week. */
@@ -35,6 +42,9 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  app_mode: 'capture',
+  card_app_name: 'ZeCard Info',
+  allow_staff_registration: true,
   max_team_size: 12,
   sales_days_per_week: 4,
   company_days_per_week: 2,
@@ -53,6 +63,9 @@ export const DEFAULT_SETTINGS: Settings = {
 
 export const SettingsSchema = z
   .object({
+    app_mode: z.enum(['capture', 'card']).default('capture'),
+    card_app_name: z.string().trim().min(1).max(50).default('ZeCard Info'),
+    allow_staff_registration: z.boolean().default(true),
     max_team_size: z.number().int().min(1).max(100),
     sales_days_per_week: z.number().int().min(0).max(7),
     company_days_per_week: z.number().int().min(0).max(7),

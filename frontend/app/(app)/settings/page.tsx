@@ -5,11 +5,13 @@ import { useAuth } from '@/components/Auth';
 import { IconChevronL } from '@/components/Icons';
 import { ErrorBox, Loading, Notice, Stepper, Switch, useToast } from '@/components/ui';
 import { api, useFetch } from '@/lib/api';
+import { useBrand } from '@/lib/brand';
 import type { Settings, User } from '@/lib/types';
 import Link from 'next/link';
 
 export default function SettingsPage() {
   const { user } = useAuth();
+  const { brand, setBrand } = useBrand();
   const router = useRouter();
   const toast = useToast();
   const { data, error, loading, reload } = useFetch<{ settings: Settings }>('/api/settings');
@@ -38,6 +40,12 @@ export default function SettingsPage() {
     try {
       const r = await api<{ settings: Settings; warnings: string[] }>('/api/settings', { method: 'PUT', body: s });
       setWarn(r.warnings);
+      setBrand({
+        ...brand,
+        app_mode: r.settings.app_mode || 'capture',
+        card_name: r.settings.card_app_name || 'ZeCard Info',
+      });
+      window.dispatchEvent(new CustomEvent('app:data-changed'));
       toast('Settings saved');
       await reload();
     } catch (e: any) {
@@ -68,6 +76,82 @@ export default function SettingsPage() {
 
       {s && (
         <>
+          <h2 className="h2" style={{ margin: '4px 0 10px' }}>Active Application Mode</h2>
+          <div className="list" style={{ marginBottom: 20 }}>
+            <div style={{ padding: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10, marginBottom: 12 }}>
+                <button
+                  type="button"
+                  className="btn"
+                  style={{
+                    padding: '12px 14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'flex-start',
+                    gap: 4,
+                    background: (s.app_mode || 'capture') === 'capture' ? 'var(--brand)' : 'var(--bg-subtle, rgba(0,0,0,0.04))',
+                    color: (s.app_mode || 'capture') === 'capture' ? '#fff' : 'inherit',
+                    border: (s.app_mode || 'capture') === 'capture' ? '2px solid var(--brand)' : '1px solid var(--border-color)',
+                    borderRadius: 10,
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                  }}
+                  onClick={() => set('app_mode', 'capture')}
+                >
+                  <strong style={{ fontSize: '0.95rem' }}>🗓 Capture Scheduler Mode</strong>
+                  <span style={{ fontSize: '0.8rem', opacity: 0.85 }}>
+                    Video capture scheduling, team booking & editing queue
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  className="btn"
+                  style={{
+                    padding: '12px 14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'flex-start',
+                    gap: 4,
+                    background: s.app_mode === 'card' ? 'var(--brand)' : 'var(--bg-subtle, rgba(0,0,0,0.04))',
+                    color: s.app_mode === 'card' ? '#fff' : 'inherit',
+                    border: s.app_mode === 'card' ? '2px solid var(--brand)' : '1px solid var(--border-color)',
+                    borderRadius: 10,
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                  }}
+                  onClick={() => set('app_mode', 'card')}
+                >
+                  <strong style={{ fontSize: '0.95rem' }}>🪪 Business Card & ID Portal Mode</strong>
+                  <span style={{ fontSize: '0.8rem', opacity: 0.85 }}>
+                    Staff registration, multi-contact info, card design feedback & approval
+                  </span>
+                </button>
+              </div>
+
+              {s.app_mode === 'card' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12, marginTop: 12, borderTop: '1px solid var(--border-color)', paddingTop: 12 }}>
+                  <label className="field">
+                    <span className="label">Custom App Name (Card Collection Mode)</span>
+                    <input
+                      className="input"
+                      value={s.card_app_name || 'ZeCard Info'}
+                      onChange={(e) => set('card_app_name', e.target.value)}
+                      placeholder="e.g. ZeCard Info, Staff ID & Card Portal..."
+                    />
+                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                    <div>
+                      <span style={{ fontWeight: 550, display: 'block' }}>Allow Staff Self-Registration</span>
+                      <span className="small muted">Staff can register their account directly on the sign-in page</span>
+                    </div>
+                    <Switch label="Staff self-registration" checked={s.allow_staff_registration ?? true} onChange={(v) => set('allow_staff_registration', v)} />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           <h2 className="h2" style={{ margin: '4px 0 10px' }}>Capture days per week</h2>
           <div className="list">
             <Row title="Sales days" hint="Days when salespeople are captured">

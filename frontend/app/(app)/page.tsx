@@ -1,24 +1,37 @@
 'use client';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/components/Auth';
 import DaySheet from '@/components/DaySheet';
 import { IconChevronL, IconChevronR, IconEmpty } from '@/components/Icons';
 import { Empty, ErrorBox, Loading, Notice } from '@/components/ui';
 import { useFetch } from '@/lib/api';
+import { useBrand } from '@/lib/brand';
 import { addDays, dayNumber, longDay, mondayOf, relativeDay, todayStr, weekdayShort, weekRange } from '@/lib/dates';
 import type { WeekView } from '@/lib/types';
 
 export default function SchedulePage() {
   const { user } = useAuth();
+  const { brand } = useBrand();
+  const router = useRouter();
   const today = todayStr();
+
+  useEffect(() => {
+    if (brand.app_mode === 'card' && user) {
+      router.replace(user.role === 'admin' ? '/cards' : '/card');
+    }
+  }, [brand.app_mode, user, router]);
+
   const [weekStart, setWeekStart] = useState(mondayOf(today));
   const [picked, setPicked] = useState<string | null>(null);
-  const { data, error, loading, reload } = useFetch<WeekView>(`/api/weeks/${weekStart}`);
-  const next = useFetch<{ booking: { id: number; date: string; startTime: string } | null }>(user?.role === 'sales' ? '/api/me/next' : null);
+  const { data, error, loading, reload } = useFetch<WeekView>(brand.app_mode === 'card' ? null : `/api/weeks/${weekStart}`);
+  const next = useFetch<{ booking: { id: number; date: string; startTime: string } | null }>(
+    user?.role === 'sales' && brand.app_mode !== 'card' ? '/api/me/next' : null
+  );
 
-  const reqs = useFetch<{ items: unknown[] }>(user?.role === 'admin' ? '/api/requests' : null);
-  if (!user) return null;
+  const reqs = useFetch<{ items: unknown[] }>(user?.role === 'admin' && brand.app_mode !== 'card' ? '/api/requests' : null);
+  if (!user || brand.app_mode === 'card') return null;
   const isAdmin = user.role === 'admin';
   const days = data?.days ?? [];
   const sel = days.find((d) => d.date === picked) ?? days.find((d) => d.date === today) ?? days.find((d) => d.date >= today) ?? days[0] ?? null;

@@ -235,8 +235,77 @@ Notification.init(
   { sequelize, modelName: 'Notification', tableName: 'notifications', indexes: [{ fields: ['userId'] }] }
 );
 
+export type CardStatus = 'draft' | 'submitted' | 'card_sent' | 'revision_requested' | 'approved';
+
+export class CardSubmission extends Model {
+  declare id: number;
+  declare userId: number;
+  declare fullName: string;
+  declare email: string;
+  declare phones: string; // JSON array of phone numbers
+  declare positions: string; // JSON array of job positions/titles
+  declare department: string | null;
+  declare company: string | null;
+  declare address: string | null;
+  declare notes: string | null;
+  declare photoUrl: string | null;
+  declare cardDesignUrl: string | null;
+  declare cardDesignBackUrl: string | null;
+  declare adminNote: string | null;
+  declare status: CardStatus;
+  declare approvedAt: Date | null;
+  declare createdAt: Date;
+  declare updatedAt: Date;
+}
+CardSubmission.init(
+  {
+    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    userId: { type: DataTypes.INTEGER, allowNull: false },
+    fullName: { type: DataTypes.STRING(120), allowNull: false },
+    email: { type: DataTypes.STRING(150), allowNull: false },
+    phones: { type: DataTypes.TEXT, allowNull: false, defaultValue: '[]' },
+    positions: { type: DataTypes.TEXT, allowNull: false, defaultValue: '[]' },
+    department: { type: DataTypes.STRING(100), allowNull: true },
+    company: { type: DataTypes.STRING(100), allowNull: true },
+    address: { type: DataTypes.STRING(250), allowNull: true },
+    notes: { type: DataTypes.TEXT, allowNull: true },
+    photoUrl: { type: DataTypes.TEXT, allowNull: true },
+    cardDesignUrl: { type: DataTypes.TEXT, allowNull: true },
+    cardDesignBackUrl: { type: DataTypes.TEXT, allowNull: true },
+    adminNote: { type: DataTypes.TEXT, allowNull: true },
+    status: { type: DataTypes.STRING(30), allowNull: false, defaultValue: 'draft' },
+    approvedAt: { type: DataTypes.DATE, allowNull: true },
+  },
+  { sequelize, modelName: 'CardSubmission', tableName: 'card_submissions', indexes: [{ fields: ['userId'] }, { fields: ['status'] }] }
+);
+
+export class CardFeedback extends Model {
+  declare id: number;
+  declare submissionId: number;
+  declare userId: number;
+  declare senderRole: 'admin' | 'staff';
+  declare message: string;
+  declare createdAt: Date;
+}
+CardFeedback.init(
+  {
+    id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    submissionId: { type: DataTypes.INTEGER, allowNull: false },
+    userId: { type: DataTypes.INTEGER, allowNull: false },
+    senderRole: { type: DataTypes.STRING(20), allowNull: false },
+    message: { type: DataTypes.TEXT, allowNull: false },
+  },
+  { sequelize, modelName: 'CardFeedback', tableName: 'card_feedbacks', indexes: [{ fields: ['submissionId'] }] }
+);
+
 Booking.belongsTo(CaptureDay, { foreignKey: 'captureDayId', as: 'day' });
 CaptureDay.hasMany(Booking, { foreignKey: 'captureDayId', as: 'bookings' });
+
+CardSubmission.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+User.hasMany(CardSubmission, { foreignKey: 'userId', as: 'cardSubmissions' });
+CardSubmission.hasMany(CardFeedback, { foreignKey: 'submissionId', as: 'feedbacks' });
+CardFeedback.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+CardFeedback.belongsTo(CardSubmission, { foreignKey: 'submissionId', as: 'submission' });
 
 export async function initDb(): Promise<void> {
   await sequelize.authenticate();

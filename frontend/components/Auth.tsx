@@ -10,9 +10,17 @@ interface AuthState {
   unread: number;
   refreshUnread: () => void;
   signIn: (username: string, password: string) => Promise<void>;
+  signUp: (payload: { name: string; username: string; password: string; email: string; phone?: string; positions?: string[] }) => Promise<void>;
   signOut: () => void;
 }
-const Ctx = createContext<AuthState>({ user: null, unread: 0, refreshUnread: () => {}, signIn: async () => {}, signOut: () => {} });
+const Ctx = createContext<AuthState>({
+  user: null,
+  unread: 0,
+  refreshUnread: () => {},
+  signIn: async () => {},
+  signUp: async () => {},
+  signOut: () => {},
+});
 export const useAuth = () => useContext(Ctx);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -57,6 +65,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUnread(me.unread);
   }, []);
 
+  const signUp = useCallback(
+    async (payload: { name: string; username: string; password: string; email: string; phone?: string; positions?: string[] }) => {
+      const r = await api<{ token: string; user: User }>('/api/auth/register', { method: 'POST', body: payload });
+      tokenStore.set(r.token);
+      setUser(r.user);
+      const me = await api<{ unread: number }>('/api/auth/me').catch(() => ({ unread: 0 }));
+      setUnread(me.unread);
+    },
+    []
+  );
+
   const signOut = useCallback(() => {
     tokenStore.clear();
     try {
@@ -84,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   if (!user && path !== '/login') return null;
 
   return (
-    <Ctx.Provider value={{ user, unread, refreshUnread, signIn, signOut }}>
+    <Ctx.Provider value={{ user, unread, refreshUnread, signIn, signUp, signOut }}>
       <ToastProvider>{children}</ToastProvider>
     </Ctx.Provider>
   );

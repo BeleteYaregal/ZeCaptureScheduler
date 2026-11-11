@@ -5,9 +5,11 @@ export interface Branding {
   name: string;
   color: string;
   logo: string | null;
+  app_mode?: 'capture' | 'card';
+  card_name?: string;
 }
 
-export const DEFAULT_BRANDING: Branding = { name: 'CaptureSheet', color: '#1a56db', logo: null };
+export const DEFAULT_BRANDING: Branding = { name: 'CaptureSheet', color: '#1a56db', logo: null, app_mode: 'capture', card_name: 'ZeCard Info' };
 
 const KEYS = { name: 'brand_name', color: 'brand_color', logo: 'brand_logo' } as const;
 
@@ -23,7 +25,7 @@ export const BrandingSchema = z.object({
 });
 
 export async function getBranding(): Promise<Branding> {
-  const rows = await Setting.findAll({ where: { key: Object.values(KEYS) } });
+  const rows = await Setting.findAll({ where: { key: [...Object.values(KEYS), 'app_mode', 'card_app_name'] } });
   const out: Branding = { ...DEFAULT_BRANDING };
   for (const r of rows) {
     try {
@@ -31,6 +33,8 @@ export async function getBranding(): Promise<Branding> {
       if (r.key === KEYS.name && typeof v === 'string') out.name = v;
       if (r.key === KEYS.color && typeof v === 'string') out.color = v;
       if (r.key === KEYS.logo && (typeof v === 'string' || v === null)) out.logo = v;
+      if (r.key === 'app_mode' && (v === 'capture' || v === 'card')) out.app_mode = v;
+      if (r.key === 'card_app_name' && typeof v === 'string') out.card_name = v;
     } catch {
       /* keep default */
     }
