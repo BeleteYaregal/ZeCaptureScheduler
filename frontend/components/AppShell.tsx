@@ -28,7 +28,7 @@ const TABS: Tab[] = [
   { href: '/book', label: 'Book', icon: IconSend, roles: ['supervisor'] },
   { href: '/my-team', label: 'My team', icon: IconTeam, roles: ['supervisor'] },
   { href: '/editing', label: 'Editing', icon: IconFilm, roles: ['videographer'] },
-  { href: '/days-off', label: 'Days off', icon: IconLock, roles: ['sales'] },
+  { href: '/days-off', label: 'Days off', icon: IconLock, roles: ['sales', 'videographer'] },
   { href: '/more', label: 'More', icon: IconMore, roles: ALL },
 ];
 

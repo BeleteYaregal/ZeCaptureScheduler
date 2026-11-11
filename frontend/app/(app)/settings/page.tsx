@@ -164,6 +164,19 @@ export default function SettingsPage() {
             <Row title="Day finishes at" hint="Last capture must end by this time (default 16:30)">
               <input className="input" type="time" style={{ width: 130 }} value={s.day_end_time || '16:30'} onChange={(e) => set('day_end_time', e.target.value)} aria-label="Day finish time" />
             </Row>
+            <Row title="Lunch break / Out time" hint="Reserve a gap for videographer lunch break (no captures)">
+              <Switch label="Lunch break" checked={s.lunch_break_enabled !== false} onChange={(v) => set('lunch_break_enabled', v)} />
+            </Row>
+            {s.lunch_break_enabled !== false && (
+              <>
+                <Row title="Lunch break starts" hint="Videographer break starts (default 12:30 PM)">
+                  <input className="input" type="time" style={{ width: 130 }} value={s.lunch_start_time || '12:30'} onChange={(e) => set('lunch_start_time', e.target.value)} aria-label="Lunch break start time" />
+                </Row>
+                <Row title="Lunch break ends" hint="Videographer break ends (default 1:30 PM / 1 hour gap)">
+                  <input className="input" type="time" style={{ width: 130 }} value={s.lunch_end_time || '13:30'} onChange={(e) => set('lunch_end_time', e.target.value)} aria-label="Lunch break end time" />
+                </Row>
+              </>
+            )}
           </div>
 
           <h2 className="h2" style={{ margin: '26px 0 10px' }}>Overdue</h2>

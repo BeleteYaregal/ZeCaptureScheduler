@@ -54,18 +54,27 @@ async function recomputeSlots(dayId: number, settings: Settings): Promise<void> 
   });
   const today = todayIn(config.timezone);
   let i = 0;
+  let curTime = day.startTime;
   for (const b of list) {
     if (b.status === 'requested' && b.startTime) {
       i++;
       continue;
     }
-    const start = addMinutes(day.startTime, i * settings.slot_minutes);
+    if (
+      settings.lunch_break_enabled &&
+      curTime < settings.lunch_end_time &&
+      addMinutes(curTime, settings.slot_minutes) > settings.lunch_start_time
+    ) {
+      curTime = settings.lunch_end_time;
+    }
+    const start = curTime;
     if (
       day.date === today &&
       isTimePassed(day.date, start, config.timezone) &&
       b.startTime &&
       !isTimePassed(day.date, b.startTime, config.timezone)
     ) {
+      curTime = addMinutes(curTime, settings.slot_minutes);
       i++;
       continue;
     }
@@ -74,6 +83,7 @@ async function recomputeSlots(dayId: number, settings: Settings): Promise<void> 
       b.startTime = start;
       await b.save();
     }
+    curTime = addMinutes(curTime, settings.slot_minutes);
     i++;
   }
 }
@@ -139,7 +149,11 @@ export async function getWeekView(weekStart: string, viewer: User) {
     maxTeamSize: settings.max_team_size,
     supervisorMaxPerDay: settings.supervisor_max_per_day,
     slotMinutes: settings.slot_minutes,
+    dayStartTime: settings.day_start_time || '09:00',
     dayEndTime: settings.day_end_time || '16:30',
+    lunchBreakEnabled: settings.lunch_break_enabled,
+    lunchStartTime: settings.lunch_start_time || '12:30',
+    lunchEndTime: settings.lunch_end_time || '13:30',
   };
   const blank = (status: string) => ({
     week: { weekStart, weekEnd, status, videographerId: null as number | null, videographerName: null as string | null, publishedAt: null as Date | null },
@@ -183,6 +197,17 @@ export async function getWeekView(weekStart: string, viewer: User) {
   const { supMap, mgrMap } = await loadOrgMaps();
   const showPhone = viewer.role !== 'sales';
 
+  const vidIds = [...new Set(allDays.map((d) => d.videographerId).filter((v): v is number => typeof v === 'number'))];
+  const vidUnavs = vidIds.length
+    ? await Unavailability.findAll({
+        where: {
+          userId: { [Op.in]: vidIds },
+          date: { [Op.in]: allDays.map((d) => d.date) },
+        },
+      })
+    : [];
+  const vidUnavMap = new Map(vidUnavs.map((u) => [`${u.userId}:${u.date}`, u.reason || 'Unavailable']));
+
   const dayIdSet = new Set(days.map((d) => d.id));
   const draftWeek = week.status !== 'published';
   const shownBookings = bookings.filter((b) => {
@@ -222,14 +247,29 @@ export async function getWeekView(weekStart: string, viewer: User) {
       const dayCap = cap || 24;
       const endTime = settings.day_end_time || '16:30';
       let nextSlot = d.startTime;
+      let cur = d.startTime;
       for (let s = 0; s < dayCap; s++) {
-        const t = addMinutes(d.startTime, s * settings.slot_minutes);
-        if (addMinutes(t, settings.slot_minutes) > endTime) break;
-        if (d.date === today && isTimePassed(d.date, t, config.timezone)) continue;
-        if (occSet.has(t)) continue;
-        nextSlot = t;
+        if (
+          settings.lunch_break_enabled &&
+          cur < settings.lunch_end_time &&
+          addMinutes(cur, settings.slot_minutes) > settings.lunch_start_time
+        ) {
+          cur = settings.lunch_end_time;
+        }
+        if (addMinutes(cur, settings.slot_minutes) > endTime) break;
+        if (d.date === today && isTimePassed(d.date, cur, config.timezone)) {
+          cur = addMinutes(cur, settings.slot_minutes);
+          continue;
+        }
+        if (occSet.has(cur)) {
+          cur = addMinutes(cur, settings.slot_minutes);
+          continue;
+        }
+        nextSlot = cur;
         break;
       }
+      const vUnavReason = d.videographerId ? vidUnavMap.get(`${d.videographerId}:${d.date}`) : undefined;
+      const isVidUnav = vUnavReason !== undefined;
       return {
         id: d.id,
         date: d.date,
@@ -237,9 +277,17 @@ export async function getWeekView(weekStart: string, viewer: User) {
         status: d.status,
         startTime: d.startTime,
         dayEndTime: endTime,
+        lunchBreakEnabled: settings.lunch_break_enabled,
+        lunchStartTime: settings.lunch_start_time || '12:30',
+        lunchEndTime: settings.lunch_end_time || '13:30',
         note: d.note,
         videographer: d.videographerId
-          ? { id: d.videographerId, name: personMap.get(d.videographerId)?.name ?? 'Unknown' }
+          ? {
+              id: d.videographerId,
+              name: personMap.get(d.videographerId)?.name ?? 'Unknown',
+              unavailable: isVidUnav,
+              unavailableReason: vUnavReason ?? null,
+            }
           : null,
         capacity: d.type === 'sales' ? cap : null,
         load: loadByDay.get(d.id) ?? 0,
@@ -295,6 +343,14 @@ export async function getWeekView(weekStart: string, viewer: User) {
       out.warnings = JSON.parse(week.warnings);
     } catch {
       out.warnings = [];
+    }
+    for (const d of allDays) {
+      if (d.status === 'active' && d.videographerId && vidUnavMap.has(`${d.videographerId}:${d.date}`)) {
+        const vName = personMap.get(d.videographerId)?.name ?? 'Videographer';
+        const reasonStr = vidUnavMap.get(`${d.videographerId}:${d.date}`);
+        const wMsg = `${vName} is marked unavailable on ${prettyDay(d.date)}${reasonStr && reasonStr !== 'Unavailable' ? ` (${reasonStr})` : ''} but is assigned to capture that day.`;
+        if (!out.warnings.includes(wMsg)) out.warnings.push(wMsg);
+      }
     }
     if (activeSalesDays > 0) {
       const have = new Set(bookings.filter((b) => OCCUPYING.includes(b.status)).map((b) => b.salesId));
@@ -478,14 +534,23 @@ export async function generateWeek(actor: User, weekStart: string) {
   let booked = 0;
   for (const d of salesDays) {
     const ids = result.assignments.get(d.id) ?? [];
+    let curTime = d.startTime;
     for (let i = 0; i < ids.length; i++) {
+      if (
+        settings.lunch_break_enabled &&
+        curTime < settings.lunch_end_time &&
+        addMinutes(curTime, settings.slot_minutes) > settings.lunch_start_time
+      ) {
+        curTime = settings.lunch_end_time;
+      }
       await Booking.create({
         captureDayId: d.id,
         salesId: ids[i],
         slotOrder: i,
-        startTime: addMinutes(d.startTime, i * settings.slot_minutes),
+        startTime: curTime,
         status: 'planned',
       });
+      curTime = addMinutes(curTime, settings.slot_minutes);
       booked++;
     }
   }

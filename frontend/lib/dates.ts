@@ -82,17 +82,26 @@ export function computeDaySlots(
   date: string,
   today = todayStr(),
   nowTime = nowTimeStr(),
-  endTime = '16:30'
+  endTime = '16:30',
+  lunchBreak?: { enabled?: boolean; start?: string; end?: string }
 ): SlotInfo[] {
   const cap = Math.max(1, capacity || 6);
   const slots: SlotInfo[] = [];
   const gap = slotMinutes || 30;
+  const lunchEnabled = lunchBreak?.enabled !== false;
+  const lunchStart = lunchBreak?.start || '12:30';
+  const lunchEnd = lunchBreak?.end || '13:30';
+
+  let cur = startTime || '09:00';
   for (let i = 0; i < cap; i++) {
-    const time = addMinutes(startTime || '09:00', i * gap);
-    if (addMinutes(time, gap) > endTime) break;
-    const passed = isTimePassed(date, time, today, nowTime);
-    const occupied = occupiedTimes.has(time);
-    slots.push({ time, passed, occupied });
+    if (lunchEnabled && cur < lunchEnd && addMinutes(cur, gap) > lunchStart) {
+      cur = lunchEnd;
+    }
+    if (addMinutes(cur, gap) > endTime) break;
+    const passed = isTimePassed(date, cur, today, nowTime);
+    const occupied = occupiedTimes.has(cur);
+    slots.push({ time: cur, passed, occupied });
+    cur = addMinutes(cur, gap);
   }
   return slots;
 }

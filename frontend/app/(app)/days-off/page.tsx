@@ -17,7 +17,8 @@ export default function DaysOffPage() {
   const { user } = useAuth();
   const router = useRouter();
   const toast = useToast();
-  const { data, error, loading, reload } = useFetch<{ items: Item[] }>(user?.role === 'sales' ? '/api/unavailability' : null);
+  const allowed = user?.role === 'sales' || user?.role === 'videographer';
+  const { data, error, loading, reload } = useFetch<{ items: Item[] }>(allowed ? '/api/unavailability' : null);
   const [date, setDate] = useState('');
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -25,9 +26,9 @@ export default function DaysOffPage() {
   const [warn, setWarn] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user && user.role !== 'sales') router.replace('/');
-  }, [user, router]);
-  if (!user || user.role !== 'sales') return null;
+    if (user && !allowed) router.replace('/');
+  }, [user, allowed, router]);
+  if (!user || !allowed) return null;
 
   async function add() {
     setBusy(true);
@@ -36,7 +37,7 @@ export default function DaysOffPage() {
     try {
       const r = await api<{ warning: string | null }>('/api/unavailability', { method: 'POST', body: { date, reason: reason || null } });
       setWarn(r.warning);
-      toast('Day off added');
+      toast(user?.role === 'videographer' ? 'Unavailable date marked' : 'Day off added');
       setDate('');
       setReason('');
       reload();
@@ -61,8 +62,12 @@ export default function DaysOffPage() {
     <div className="page">
       <div className="page-head">
         <div>
-          <h1 className="title">Days off</h1>
-          <p className="subtitle">Tell the marketing manager when you cannot be captured</p>
+          <h1 className="title">{user.role === 'videographer' ? 'Unavailability & Days off' : 'Days off'}</h1>
+          <p className="subtitle">
+            {user.role === 'videographer'
+              ? 'Tell the manager when you are unavailable for shoot days'
+              : 'Tell the marketing manager when you cannot be captured'}
+          </p>
         </div>
       </div>
 
@@ -75,10 +80,10 @@ export default function DaysOffPage() {
         </label>
         <label className="field">
           <span className="label">Reason (optional)</span>
-          <input className="input" value={reason} maxLength={120} onChange={(e) => setReason(e.target.value)} placeholder="For example: family event" />
+          <input className="input" value={reason} maxLength={120} onChange={(e) => setReason(e.target.value)} placeholder={user.role === 'videographer' ? 'For example: personal event, out of town' : 'For example: family event'} />
         </label>
         <button className="btn btn-primary btn-block" disabled={busy || !date} onClick={add}>
-          Add day off
+          {user.role === 'videographer' ? 'Mark day unavailable' : 'Add day off'}
         </button>
       </div>
 

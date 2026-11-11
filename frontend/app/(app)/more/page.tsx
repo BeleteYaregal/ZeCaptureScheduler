@@ -114,6 +114,18 @@ export default function MorePage() {
 
       <h2 className="list-title">Your account</h2>
       <div className="list">
+        {(user.role === 'sales' || user.role === 'videographer') && (
+          <Link href="/days-off" className="row">
+            <IconLock className="ico" />
+            <div className="grow">
+              <div className="name">{user.role === 'videographer' ? 'Unavailability & Days off' : 'Days off'}</div>
+              <div className="meta">
+                {user.role === 'videographer' ? 'Mark dates when you are unavailable to shoot' : 'Tell the manager when you cannot be captured'}
+              </div>
+            </div>
+            <IconChevronR className="ico" />
+          </Link>
+        )}
         <Link href="/alerts" className="row">
           <IconBell className="ico" />
           <div className="grow name">Alerts</div>

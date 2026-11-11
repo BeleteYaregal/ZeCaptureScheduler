@@ -338,18 +338,35 @@ adminRouter.post(
     const today = todayIn(config.timezone);
     if (body.date < today) throw new HttpError(422, 'That date is in the past', 'BAD_DATE');
     const target = await User.findByPk(userId);
-    if (!target || target.role !== 'sales') throw new HttpError(422, 'Only salespeople have capture availability', 'BAD_PERSON');
+    if (!target || (target.role !== 'sales' && target.role !== 'videographer')) {
+      throw new HttpError(422, 'Only salespeople and videographers have capture availability', 'BAD_PERSON');
+    }
 
     const [row] = await Unavailability.findOrCreate({ where: { userId, date: body.date }, defaults: { userId, date: body.date, reason: body.reason ?? null } });
     let warning: string | null = null;
-    const booked = await Booking.findOne({
-      where: { salesId: userId, status: 'planned' },
-      include: [{ model: CaptureDay, as: 'day', required: true, where: { date: body.date, status: 'active' } }],
-    });
-    if (booked) {
-      warning = `You are already booked on ${prettyDay(body.date)}. The marketing manager has been told and will move your booking.`;
-      const admins = await User.findAll({ where: { role: 'admin', active: true } });
-      await notify(admins.map((a) => a.id), 'Availability conflict', `${target.name} cannot do ${prettyDay(body.date)} but is booked that day.`);
+    if (target.role === 'videographer') {
+      const assignedDay = await CaptureDay.findOne({
+        where: { videographerId: userId, date: body.date, status: 'active' },
+      });
+      if (assignedDay) {
+        warning = `You are scheduled as the videographer on ${prettyDay(body.date)}. The marketing manager has been alerted to reassign the shoot day.`;
+        const admins = await User.findAll({ where: { role: 'admin', active: true } });
+        await notify(
+          admins.map((a) => a.id),
+          'Videographer unavailable',
+          `${target.name} marked unavailable on ${prettyDay(body.date)} but is assigned to capture that day.`
+        );
+      }
+    } else {
+      const booked = await Booking.findOne({
+        where: { salesId: userId, status: 'planned' },
+        include: [{ model: CaptureDay, as: 'day', required: true, where: { date: body.date, status: 'active' } }],
+      });
+      if (booked) {
+        warning = `You are already booked on ${prettyDay(body.date)}. The marketing manager has been told and will move your booking.`;
+        const admins = await User.findAll({ where: { role: 'admin', active: true } });
+        await notify(admins.map((a) => a.id), 'Availability conflict', `${target.name} cannot do ${prettyDay(body.date)} but is booked that day.`);
+      }
     }
     await audit(req.user!.id, 'availability.add', 'user', userId, { date: body.date });
     res.status(201).json({ item: { id: row.id, userId, date: row.date, reason: row.reason }, warning });

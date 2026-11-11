@@ -77,6 +77,12 @@ async function adminIds() {
   return (await User.findAll({ where: { role: 'admin', active: true } })).map((a) => a.id);
 }
 
+function isLunchBreakSlot(time: string, slotMinutes: number, settings: Settings): boolean {
+  if (!settings.lunch_break_enabled) return false;
+  const slotEnd = addMinutes(time, slotMinutes);
+  return time < settings.lunch_end_time && slotEnd > settings.lunch_start_time;
+}
+
 /** Supervisor asks for slots for several of his people on one day. Each is checked on its own. */
 export async function createRequests(actor: User, body: unknown) {
   const sup = await mySupervisor(actor);
@@ -106,6 +112,13 @@ export async function createRequests(actor: User, body: unknown) {
     if (startTime < day.startTime || slotEnd > endTime) {
       throw new HttpError(422, `Requested time ${startTime} is outside working hours (${day.startTime} to ${endTime}).`, 'OUTSIDE_HOURS');
     }
+    if (isLunchBreakSlot(startTime, settings.slot_minutes, settings)) {
+      throw new HttpError(
+        422,
+        `Requested time ${startTime} is during videographer lunch break (${settings.lunch_start_time} to ${settings.lunch_end_time}).`,
+        'LUNCH_BREAK'
+      );
+    }
     if (day.date === today && isTimePassed(day.date, startTime, config.timezone)) {
       throw new HttpError(
         422,
@@ -118,15 +131,24 @@ export async function createRequests(actor: User, body: unknown) {
     }
     initialSlot = startTime;
   } else {
-    // If no startTime specified, find the first upcoming open slot within working hours
+    // If no startTime specified, find the first upcoming open slot within working hours (skipping lunch break)
     let found: string | null = null;
     const maxSlots = Math.max(cap, 24);
+    let cur = day.startTime;
     for (let s = 0; s < maxSlots; s++) {
-      const t = addMinutes(day.startTime, s * settings.slot_minutes);
-      if (addMinutes(t, settings.slot_minutes) > endTime) break;
-      if (day.date === today && isTimePassed(day.date, t, config.timezone)) continue;
-      if (occupiedTimes.has(t)) continue;
-      found = t;
+      if (isLunchBreakSlot(cur, settings.slot_minutes, settings)) {
+        cur = settings.lunch_end_time;
+      }
+      if (addMinutes(cur, settings.slot_minutes) > endTime) break;
+      if (day.date === today && isTimePassed(day.date, cur, config.timezone)) {
+        cur = addMinutes(cur, settings.slot_minutes);
+        continue;
+      }
+      if (occupiedTimes.has(cur)) {
+        cur = addMinutes(cur, settings.slot_minutes);
+        continue;
+      }
+      found = cur;
       break;
     }
     if (!found) {
@@ -138,6 +160,9 @@ export async function createRequests(actor: User, body: unknown) {
         );
       }
       found = addMinutes(day.startTime, existingBookings.length * settings.slot_minutes);
+      if (isLunchBreakSlot(found, settings.slot_minutes, settings)) {
+        found = settings.lunch_end_time;
+      }
     }
     initialSlot = found;
   }
@@ -158,6 +183,9 @@ export async function createRequests(actor: User, body: unknown) {
       });
       if (mine >= settings.supervisor_max_per_day) {
         throw new HttpError(409, `Your daily limit is ${settings.supervisor_max_per_day} people (${prettyDay(day.date)}).`, 'SUP_LIMIT');
+      }
+      if (isLunchBreakSlot(currentSlot, settings.slot_minutes, settings)) {
+        currentSlot = settings.lunch_end_time;
       }
       if (addMinutes(currentSlot, settings.slot_minutes) > endTime) {
         throw new HttpError(422, `Cannot schedule at ${currentSlot}: working hours finish at ${endTime}.`, 'OUTSIDE_HOURS');
@@ -180,8 +208,14 @@ export async function createRequests(actor: User, body: unknown) {
 
       // Advance to next open slot
       let next = addMinutes(currentSlot, settings.slot_minutes);
+      if (isLunchBreakSlot(next, settings.slot_minutes, settings)) {
+        next = settings.lunch_end_time;
+      }
       while (occupiedTimes.has(next)) {
         next = addMinutes(next, settings.slot_minutes);
+        if (isLunchBreakSlot(next, settings.slot_minutes, settings)) {
+          next = settings.lunch_end_time;
+        }
       }
       currentSlot = next;
     } catch (e: any) {
@@ -282,10 +316,29 @@ export async function listAvailableDays() {
     });
     const cap = await capForWeek(d.weekStart, settings);
     const endTime = settings.day_end_time || '16:30';
-    const nextSlot = addMinutes(d.startTime, load * settings.slot_minutes);
-    const slotEnd = addMinutes(nextSlot, settings.slot_minutes);
-    const isPassed = d.date === today && isTimePassed(d.date, nextSlot, config.timezone);
-    if (!isPassed && load < cap && slotEnd <= endTime) {
+    const existing = await Booking.findAll({
+      where: { captureDayId: d.id, status: { [Op.ne]: 'rescheduled' } },
+    });
+    const occupied = new Set(existing.map((b) => b.startTime));
+    let nextSlot: string | null = null;
+    let cur = d.startTime;
+    for (let s = 0; s < cap; s++) {
+      if (isLunchBreakSlot(cur, settings.slot_minutes, settings)) {
+        cur = settings.lunch_end_time;
+      }
+      if (addMinutes(cur, settings.slot_minutes) > endTime) break;
+      if (d.date === today && isTimePassed(d.date, cur, config.timezone)) {
+        cur = addMinutes(cur, settings.slot_minutes);
+        continue;
+      }
+      if (occupied.has(cur)) {
+        cur = addMinutes(cur, settings.slot_minutes);
+        continue;
+      }
+      nextSlot = cur;
+      break;
+    }
+    if (nextSlot && load < cap) {
       list.push({
         id: d.id,
         date: d.date,
@@ -327,6 +380,9 @@ export async function approveRequest(actor: User, bookingId: number, body: unkno
         where: { captureDayId: targetDay.id, status: { [Op.ne]: 'rescheduled' } },
       });
       targetStartTime = addMinutes(targetDay.startTime, existing * settings.slot_minutes);
+      if (isLunchBreakSlot(targetStartTime, settings.slot_minutes, settings)) {
+        targetStartTime = settings.lunch_end_time;
+      }
     }
   }
 
@@ -345,6 +401,13 @@ export async function approveRequest(actor: User, bookingId: number, body: unkno
       422,
       `Cannot approve: slot ${targetStartTime} is outside working hours (${targetDay.startTime} to ${endTime}).`,
       'OUTSIDE_HOURS'
+    );
+  }
+  if (!override && isLunchBreakSlot(targetStartTime, settings.slot_minutes, settings)) {
+    throw new HttpError(
+      422,
+      `Cannot approve: slot ${targetStartTime} is during videographer lunch break (${settings.lunch_start_time} to ${settings.lunch_end_time}).`,
+      'LUNCH_BREAK'
     );
   }
 
