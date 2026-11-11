@@ -32,23 +32,23 @@ export default function LoginPage() {
 
     if (mode === 'login') {
       if (!username.trim() || !password) {
-        setError('Enter your username and password.');
+        setError('Please enter your username and password.');
         return;
       }
       setBusy(true);
       try {
         await signIn(username.trim(), password);
       } catch (err: any) {
-        setError(err.message || 'Could not sign in');
+        setError(err.message || 'Wrong username or password');
         setBusy(false);
       }
     } else {
       if (!fullName.trim()) {
-        setError('Enter your full name.');
+        setError('Please enter your full name as it should appear on your business card.');
         return;
       }
       if (!email.trim() || !email.includes('@')) {
-        setError('Enter a valid email address.');
+        setError('Please enter a valid work email address.');
         return;
       }
       if (!username.trim() || username.trim().length < 3) {
@@ -67,7 +67,7 @@ export default function LoginPage() {
           password,
           email: email.trim(),
           phone: phone.trim() || undefined,
-          positions: position.trim() ? [position.trim()] : ['Sales Representative'],
+          positions: position.trim() ? [position.trim()] : ['Staff Member'],
         });
       } catch (err: any) {
         setError(err.message || 'Could not register');
@@ -82,24 +82,40 @@ export default function LoginPage() {
         <ThemeToggle />
       </div>
 
-      <div className="login-card" style={{ maxWidth: 440 }}>
+      <div className="login-card" style={{ maxWidth: 450 }}>
         <div className="login-logo">
           <BrandLogo size={68} radius={20} />
         </div>
         <h1>{appTitle}</h1>
-        <p className="muted">
+        <p className="muted" style={{ fontSize: '0.95rem', marginTop: 4 }}>
           {isCardMode
             ? mode === 'register'
-              ? 'Register your account to submit business card details.'
-              : 'Sign in to manage your business card design.'
+              ? 'Register your profile to submit your business card & ID information.'
+              : 'Sign in to review and approve your business card design.'
             : 'Sign in to see your schedule.'}
         </p>
 
-        <div style={{ display: 'flex', gap: 6, margin: '14px 0 16px', background: 'var(--bg-subtle, rgba(0,0,0,0.05))', padding: 4, borderRadius: 10 }}>
+        {/* Tab switch between Sign In and Register */}
+        <div
+          style={{
+            display: 'flex',
+            gap: 6,
+            margin: '18px 0 16px',
+            background: 'var(--bg-subtle, rgba(0,0,0,0.05))',
+            padding: 4,
+            borderRadius: 12,
+          }}
+        >
           <button
             type="button"
             className={`btn btn-block ${mode === 'login' ? 'btn-primary' : 'btn-ghost'}`}
-            style={{ flex: 1, padding: '8px 12px', fontSize: '0.9rem', borderRadius: 8 }}
+            style={{
+              flex: 1,
+              padding: '9px 14px',
+              fontSize: '0.92rem',
+              fontWeight: mode === 'login' ? 600 : 500,
+              borderRadius: 9,
+            }}
             onClick={() => {
               setMode('login');
               setError(null);
@@ -110,7 +126,13 @@ export default function LoginPage() {
           <button
             type="button"
             className={`btn btn-block ${mode === 'register' ? 'btn-primary' : 'btn-ghost'}`}
-            style={{ flex: 1, padding: '8px 12px', fontSize: '0.9rem', borderRadius: 8 }}
+            style={{
+              flex: 1,
+              padding: '9px 14px',
+              fontSize: '0.92rem',
+              fontWeight: mode === 'register' ? 600 : 500,
+              borderRadius: 9,
+            }}
             onClick={() => {
               setMode('register');
               setError(null);
@@ -133,7 +155,7 @@ export default function LoginPage() {
                     className="input"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    placeholder="e.g. Abebe Kebede"
+                    placeholder="Full name (printed on card)"
                     required
                   />
                 </span>
@@ -146,29 +168,29 @@ export default function LoginPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="e.g. abebe@company.com"
+                  placeholder="name@company.com"
                   required
                 />
               </label>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <label className="field">
-                  <span className="label">Phone</span>
+                  <span className="label">Phone Number</span>
                   <input
                     className="input"
                     type="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+251..."
+                    placeholder="+251 91 123 4567"
                   />
                 </label>
                 <label className="field">
-                  <span className="label">Position</span>
+                  <span className="label">Job Title / Role</span>
                   <input
                     className="input"
                     value={position}
                     onChange={(e) => setPosition(e.target.value)}
-                    placeholder="e.g. Sales Agent"
+                    placeholder="e.g. Sales Consultant"
                   />
                 </label>
               </div>
@@ -187,7 +209,7 @@ export default function LoginPage() {
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck={false}
-                placeholder="Choose username"
+                placeholder="Choose your username"
                 required
               />
             </span>
@@ -203,7 +225,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                placeholder={mode === 'login' ? 'Your password' : 'Min 6 characters'}
+                placeholder={mode === 'login' ? 'Your password' : 'At least 6 characters'}
                 style={{ paddingRight: 72 }}
                 required
               />
@@ -213,8 +235,14 @@ export default function LoginPage() {
             </span>
           </label>
 
-          <button className="btn btn-primary btn-block btn-lg" disabled={busy} type="submit" style={{ marginTop: 10 }}>
-            {busy ? (mode === 'login' ? 'Signing in…' : 'Creating account…') : mode === 'login' ? 'Sign in' : 'Create Account & Continue'}
+          <button className="btn btn-primary btn-block btn-lg" disabled={busy} type="submit" style={{ marginTop: 12 }}>
+            {busy
+              ? mode === 'login'
+                ? 'Signing in…'
+                : 'Creating account…'
+              : mode === 'login'
+              ? 'Sign in'
+              : 'Create Account & Start Card'}
           </button>
         </form>
 
@@ -231,8 +259,12 @@ export default function LoginPage() {
         </div>
 
         <p className="faint small login-foot" style={{ marginTop: 16 }}>
-          {mode === 'login'
-            ? 'Need an account? Click "Register Staff" above to get started.'
+          {isCardMode
+            ? mode === 'login'
+              ? 'New staff member? Click "Register Staff" above to submit your details.'
+              : 'Already have an account? Click "Sign in" above.'
+            : mode === 'login'
+            ? 'Need an account? Contact your administrator.'
             : 'Already registered? Switch to "Sign in" above.'}
         </p>
       </div>

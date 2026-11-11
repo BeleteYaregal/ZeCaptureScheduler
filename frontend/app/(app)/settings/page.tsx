@@ -152,7 +152,32 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <h2 className="h2" style={{ margin: '4px 0 10px' }}>Capture days per week</h2>
+          {s.app_mode === 'card' ? (
+            <div
+              className="card"
+              style={{
+                padding: '20px 22px',
+                background: 'var(--bg-subtle, rgba(0,0,0,0.03))',
+                borderRadius: 14,
+                border: '1px solid var(--border-color)',
+                marginTop: 16,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                <span style={{ fontSize: '1.25rem' }}>🪪</span>
+                <strong style={{ fontSize: '1.05rem', color: 'var(--text-strong)' }}>
+                  {s.card_app_name || 'ZeCard Info'} Mode is Active
+                </strong>
+              </div>
+              <p className="small muted" style={{ margin: 0, lineHeight: 1.6 }}>
+                The application is running exclusively in <strong>Business Card & ID Info</strong> mode.
+                Staff members can register, submit multi-value contact details, preview card designs, and communicate directly with the admin.
+                Video capture scheduling options are hidden while this mode is active.
+              </p>
+            </div>
+          ) : (
+            <>
+              <h2 className="h2" style={{ margin: '4px 0 10px' }}>Capture days per week</h2>
           <div className="list">
             <Row title="Sales days" hint="Days when salespeople are captured">
               <Stepper label="sales days" value={s.sales_days_per_week} min={0} max={7} onChange={(n) => set('sales_days_per_week', n)} />
@@ -270,9 +295,11 @@ export default function SettingsPage() {
             </Row>
           </div>
 
-          <p className="small muted" style={{ marginTop: 14 }}>
-            Changes apply to weeks you plan from now on. Weeks that are already published keep their schedule.
-          </p>
+              <p className="small muted" style={{ marginTop: 14 }}>
+                Changes apply to weeks you plan from now on. Weeks that are already published keep their schedule.
+              </p>
+            </>
+          )}
 
           <div className="savebar">
             <button className="btn btn-primary btn-block" disabled={!dirty || busy || tooMany} onClick={save}>

@@ -6,6 +6,7 @@ import { InstallSheet } from '@/components/InstallPrompt';
 import { Notice, Sheet, useToast } from '@/components/ui';
 import { api, downloadFile, useFetch } from '@/lib/api';
 import { useAuth } from '@/components/Auth';
+import { useBrand } from '@/lib/brand';
 import { initials } from '@/lib/dates';
 import { ROLE_LABEL } from '@/lib/labels';
 import { ThemeMode, useTheme } from '@/lib/theme';
@@ -18,6 +19,8 @@ const MODES: { id: ThemeMode; label: string }[] = [
 
 export default function MorePage() {
   const { user, unread, signOut } = useAuth();
+  const { brand } = useBrand();
+  const isCardMode = brand.app_mode === 'card';
   const { mode, setMode } = useTheme();
   const toast = useToast();
   const [pw, setPw] = useState(false);
@@ -50,7 +53,12 @@ export default function MorePage() {
         <div style={{ minWidth: 0 }}>
           <div className="h2">{user.name}</div>
           <div className="muted small">
-            {(ROLE_LABEL as Record<string, string>)[user.role] ?? user.role} · @{user.username}
+            {isCardMode
+              ? user.role === 'admin'
+                ? 'Administrator'
+                : 'Staff Member'
+              : (ROLE_LABEL as Record<string, string>)[user.role] ?? user.role}{' '}
+            · @{user.username}
           </div>
           {user.phone && <div className="muted small">{user.phone}</div>}
         </div>
@@ -68,22 +76,26 @@ export default function MorePage() {
               </div>
               <IconChevronR className="ico" />
             </Link>
-            <Link href="/reports" className="row">
-              <IconReport className="ico" />
-              <div className="grow">
-                <div className="name">Reports and export</div>
-                <div className="meta">Filter by date and team, download Excel</div>
-              </div>
-              <IconChevronR className="ico" />
-            </Link>
-            <Link href="/editing" className="row">
-              <IconFilm className="ico" />
-              <div className="grow">
-                <div className="name">Video editing</div>
-                <div className="meta">Which videos are edited, which are waiting</div>
-              </div>
-              <IconChevronR className="ico" />
-            </Link>
+            {!isCardMode && (
+              <>
+                <Link href="/reports" className="row">
+                  <IconReport className="ico" />
+                  <div className="grow">
+                    <div className="name">Reports and export</div>
+                    <div className="meta">Filter by date and team, download Excel</div>
+                  </div>
+                  <IconChevronR className="ico" />
+                </Link>
+                <Link href="/editing" className="row">
+                  <IconFilm className="ico" />
+                  <div className="grow">
+                    <div className="name">Video editing</div>
+                    <div className="meta">Which videos are edited, which are waiting</div>
+                  </div>
+                  <IconChevronR className="ico" />
+                </Link>
+              </>
+            )}
             <Link href="/branding" className="row">
               <IconPalette className="ico" />
               <div className="grow">
@@ -96,7 +108,7 @@ export default function MorePage() {
               <IconSettings className="ico" />
               <div className="grow">
                 <div className="name">Settings</div>
-                <div className="meta">Capture days, team size, slot length</div>
+                <div className="meta">{isCardMode ? 'App mode and card portal settings' : 'Capture days, team size, slot length'}</div>
               </div>
               <IconChevronR className="ico" />
             </Link>
@@ -130,7 +142,7 @@ export default function MorePage() {
           </div>
           <IconChevronR className="ico" />
         </Link>
-        {(user.role === 'sales' || user.role === 'videographer') && (
+        {!isCardMode && (user.role === 'sales' || user.role === 'videographer') && (
           <Link href="/days-off" className="row">
             <IconLock className="ico" />
             <div className="grow">
@@ -148,14 +160,16 @@ export default function MorePage() {
           {unread > 0 && <span className="pill pill-live">{unread} new</span>}
           <IconChevronR className="ico" />
         </Link>
-        <button className="row" onClick={() => setTg(true)}>
-          <IconSend className="ico" />
-          <div className="grow">
-            <div className="name">Telegram alerts</div>
-            <div className="meta">Get your alerts in Telegram too</div>
-          </div>
-          <IconChevronR className="ico" />
-        </button>
+        {!isCardMode && (
+          <button className="row" onClick={() => setTg(true)}>
+            <IconSend className="ico" />
+            <div className="grow">
+              <div className="name">Telegram alerts</div>
+              <div className="meta">Get your alerts in Telegram too</div>
+            </div>
+            <IconChevronR className="ico" />
+          </button>
+        )}
         <div className="row" style={{ flexWrap: 'wrap' }}>
           <div className="grow">
             <div className="name">Appearance</div>

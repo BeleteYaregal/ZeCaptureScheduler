@@ -33,14 +33,13 @@ const TABS: Tab[] = [
 ];
 
 const CARD_TABS_ADMIN: Tab[] = [
-  { href: '/cards', label: 'Cards', icon: IconIdCard, roles: ['admin'], match: (p) => p === '/cards' || p === '/' },
-  { href: '/team', label: 'Team', icon: IconTeam, roles: ['admin'] },
+  { href: '/cards', label: 'Cards & ID', icon: IconIdCard, roles: ['admin'], match: (p) => p === '/cards' || p === '/' },
   { href: '/settings', label: 'Settings', icon: IconSettings, roles: ['admin'] },
   { href: '/more', label: 'More', icon: IconMore, roles: ['admin'] },
 ];
 
 const CARD_TABS_USER: Tab[] = [
-  { href: '/card', label: 'My Card', icon: IconIdCard, roles: ALL, match: (p) => p === '/card' || p === '/' },
+  { href: '/card', label: 'My Card & ID', icon: IconIdCard, roles: ALL, match: (p) => p === '/card' || p === '/' },
   { href: '/more', label: 'More', icon: IconMore, roles: ALL },
 ];
 
@@ -80,7 +79,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const pending = isCardMode ? cardPending : (reqs.data?.items.length ?? 0);
   const baseTabs = isCardMode ? (user.role === 'admin' ? CARD_TABS_ADMIN : CARD_TABS_USER) : TABS;
   const tabs = baseTabs.filter((t) => t.roles.includes(user.role));
-  const inMore = MORE_PATHS.some((m) => path.startsWith(m)) || (user.role === 'admin' && path.startsWith('/editing'));
+  const inMore = isCardMode
+    ? path === '/more' || path.startsWith('/more/') || path.startsWith('/audit') || path.startsWith('/branding') || path.startsWith('/alerts')
+    : MORE_PATHS.some((m) => path.startsWith(m)) || (user.role === 'admin' && path.startsWith('/editing'));
   const effectiveBrandName = brand.app_mode === 'card' ? (brand.card_name || 'ZeCard Info') : brand.name;
 
   return (
